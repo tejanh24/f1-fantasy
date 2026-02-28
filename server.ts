@@ -241,13 +241,19 @@ async function start() {
 
   app.post("/api/login", async (req, res) => {
     const { email, name } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    
     try {
-      let rs = await db.execute({ sql: "SELECT * FROM users WHERE email = ?", args: [email] });
+      let rs = await db.execute({ sql: "SELECT * FROM users WHERE LOWER(email) = ?", args: [normalizedEmail] });
       let user = rs.rows[0] as any;
       
       if (!user) {
-        const result = await db.execute({ sql: "INSERT INTO users (email, name) VALUES (?, ?)", args: [email, name] });
-        user = { id: Number(result.lastInsertRowid), email, name };
+        const result = await db.execute({ sql: "INSERT INTO users (email, name) VALUES (?, ?)", args: [normalizedEmail, name] });
+        user = { id: Number(result.lastInsertRowid), email: normalizedEmail, name };
+      } else if (user.name !== name) {
+        // Update the name if they log in with the same email but a different name
+        await db.execute({ sql: "UPDATE users SET name = ? WHERE id = ?", args: [name, user.id] });
+        user.name = name;
       }
       res.json(user);
     } catch (e) {
@@ -480,3 +486,4 @@ async function start() {
 start().catch(err => {
   console.error("[SERVER] Fatal error during server startup:", err);
 });
+

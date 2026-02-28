@@ -498,6 +498,7 @@ export default function App() {
   const [draftConstructors, setDraftConstructors] = useState<string[]>([]);
 
   const [races, setRaces] = useState<any[]>([]);
+  const [viewingTeam, setViewingTeam] = useState<Standing | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('f1_user');
@@ -824,7 +825,7 @@ export default function App() {
               </p>
 
               <div className="f1-card p-8 w-full max-w-md">
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
                   {error && (
                     <div className="bg-f1-red/20 border border-f1-red text-f1-red text-xs p-3 rounded-lg font-bold uppercase tracking-wider">
                       {error}
@@ -832,11 +833,24 @@ export default function App() {
                   )}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-white/40 mb-1">Full Name</label>
-                    <input name="name" required className="f1-input w-full" placeholder="Max Verstappen" autoComplete="off"/>
+                    <input 
+                      name="name" 
+                      required 
+                      className="f1-input w-full" 
+                      placeholder="Max Verstappen" 
+                      autoComplete="off"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-white/40 mb-1">Email Address</label>
-                    <input name="email" type="email" required className="f1-input w-full" placeholder="max@redbull.com" autoComplete="off"/>
+                    <input 
+                      name="email" 
+                      type="email" 
+                      required 
+                      className="f1-input w-full" 
+                      placeholder="max@redbull.com" 
+                      autoComplete="off"
+                    />
                   </div>
                   <button type="submit" disabled={loading} className="f1-button w-full mt-4">
                     {loading ? 'CONNECTING...' : 'START PLAYING'}
@@ -874,7 +888,7 @@ export default function App() {
                       <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
                     </h3>
                     <form onSubmit={handleCreateLeague} className="space-y-3">
-                      <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" />
+                      <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" autoComplete="off"/>
                       <button className="f1-button w-full text-sm py-2">CREATE</button>
                     </form>
                   </div>
@@ -883,7 +897,7 @@ export default function App() {
                       <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
                     </h3>
                     <form onSubmit={handleJoinLeague} className="space-y-3">
-                      <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" />
+                      <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" autoComplete="off"/>
                       <button className="f1-button w-full text-sm py-2 bg-white text-f1-dark hover:bg-white/90">JOIN</button>
                     </form>
                   </div>
@@ -1017,7 +1031,14 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {standings.map((s, idx) => (
-                          <tr key={idx} className={cn("hover:bg-white/5 transition-colors", s.name === user?.name && "bg-f1-red/10")}>
+                          <tr 
+                            key={idx} 
+                            onClick={() => setViewingTeam(s)}
+                            className={cn(
+                              "hover:bg-white/5 transition-colors cursor-pointer", 
+                              s.name === user?.name && "bg-f1-red/10"
+                            )}
+                          >
                             <td className="px-6 py-4 font-mono font-bold text-lg">
                               {idx + 1}
                             </td>
@@ -1122,6 +1143,85 @@ export default function App() {
               </div>
             </motion.div>
           )}
+
+          {/* Team Viewing Modal */}
+          <AnimatePresence>
+            {viewingTeam && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                onClick={() => setViewingTeam(null)}
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="f1-card w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="p-6 border-b border-white/10 flex justify-between items-center sticky top-0 bg-[#15151e] z-10">
+                    <div>
+                      <h2 className="text-2xl italic">{viewingTeam.name}'s Team</h2>
+                      <div className="text-f1-red font-mono font-bold text-xl">{viewingTeam.points} PTS</div>
+                    </div>
+                    <button 
+                      onClick={() => setViewingTeam(null)}
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                    >
+                      <LogOut className="w-5 h-5" />
+                    </button>
+                  </div>
+                  
+                  <div className="p-6 space-y-8">
+                    {/* Drivers */}
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-white/40 mb-4 flex items-center gap-2">
+                        <UserIcon className="w-4 h-4" /> Drivers
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {[viewingTeam.driver1_id, viewingTeam.driver2_id, viewingTeam.driver3_id, viewingTeam.driver4_id, viewingTeam.driver5_id].map((id, i) => {
+                          const d = drivers.find(item => item.id === id);
+                          return d ? (
+                            <div key={i} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/5">
+                              <img src={d.image} className="w-16 h-16 rounded-full bg-f1-gray object-cover" alt="" />
+                              <div>
+                                <div className="text-xs text-white/40 uppercase font-mono mb-1">Driver {i + 1}</div>
+                                <div className="font-bold text-lg leading-none">{d.name}</div>
+                                <div className="text-xs text-f1-red mt-1">{constructors.find(c => c.id === d.constructor_id)?.name}</div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Constructors */}
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-white/40 mb-4 flex items-center gap-2">
+                        <Car className="w-4 h-4" /> Constructors
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {[viewingTeam.constructor1_id, viewingTeam.constructor2_id].map((id, i) => {
+                          const c = constructors.find(item => item.id === id);
+                          return c ? (
+                            <div key={i} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/5">
+                              <img src={c.image} className="w-16 h-16 rounded-full bg-f1-gray object-contain p-2" alt="" />
+                              <div>
+                                <div className="text-xs text-white/40 uppercase font-mono mb-1">Constructor {i + 1}</div>
+                                <div className="font-bold text-lg leading-none">{c.name}</div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {view === 'draft' && selectedLeague && (
             <motion.div 
@@ -1311,3 +1411,4 @@ export default function App() {
     </div>
   );
 }
+
