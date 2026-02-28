@@ -832,11 +832,11 @@ export default function App() {
                   )}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-white/40 mb-1">Full Name</label>
-                    <input name="name" required className="f1-input w-full" placeholder="Max Verstappen" />
+                    <input name="name" required className="f1-input w-full" placeholder="Max Verstappen" autoComplete="off"/>
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-white/40 mb-1">Email Address</label>
-                    <input name="email" type="email" required className="f1-input w-full" placeholder="max@redbull.com" />
+                    <input name="email" type="email" required className="f1-input w-full" placeholder="max@redbull.com" autoComplete="off"/>
                   </div>
                   <button type="submit" disabled={loading} className="f1-button w-full mt-4">
                     {loading ? 'CONNECTING...' : 'START PLAYING'}
