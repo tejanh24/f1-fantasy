@@ -98,13 +98,13 @@ async function start() {
     await db.executeMultiple(`
       CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, name TEXT);
       CREATE TABLE IF NOT EXISTS leagues (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, invite_code TEXT UNIQUE, admin_id INTEGER);
-      CREATE TABLE IF NOT EXISTS league_members (league_id INTEGER, user_id INTEGER, PRIMARY KEY(league_id, user_id));
+      CREATE TABLE IF NOT EXISTS league_members (league_id INTEGER, user_id INTEGER, team_id INTEGER, PRIMARY KEY(league_id, user_id));
       
-      DROP TABLE IF EXISTS teams;
       CREATE TABLE IF NOT EXISTS teams (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         user_id INTEGER, 
         league_id INTEGER, 
+        name TEXT,
         driver1_id TEXT, 
         driver2_id TEXT, 
         driver3_id TEXT, 
@@ -134,6 +134,14 @@ async function start() {
         FOREIGN KEY(race_id) REFERENCES race_results(id)
       );
     `);
+    
+    // Migrations for existing databases
+    try { await db.execute("ALTER TABLE teams ADD COLUMN name TEXT DEFAULT 'My Team'"); } catch (e) {}
+    try { 
+      await db.execute("ALTER TABLE league_members ADD COLUMN team_id INTEGER"); 
+      await db.execute("UPDATE league_members SET team_id = (SELECT id FROM teams WHERE teams.user_id = league_members.user_id AND teams.league_id = league_members.league_id LIMIT 1) WHERE team_id IS NULL");
+    } catch (e) {}
+    try { await db.execute("ALTER TABLE leagues ADD COLUMN is_locked INTEGER DEFAULT 0"); } catch (e) {}
     
     // Initialize settings if not exists
     const lockSetting = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
@@ -194,6 +202,17 @@ async function start() {
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to fetch leagues" });
+    }
+  });
+
+  app.post("/api/admin/leagues/:leagueId/lock", async (req, res) => {
+    const { isLocked } = req.body;
+    try {
+      await db.execute({ sql: "UPDATE leagues SET is_locked = ? WHERE id = ?", args: [isLocked ? 1 : 0, req.params.leagueId] });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to update league lock status" });
     }
   });
 
@@ -273,12 +292,21 @@ async function start() {
   });
 
   app.post("/api/leagues", async (req, res) => {
-    const { name, adminId } = req.body;
-    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const { name, adminId, teamId } = req.body;
+    if (!teamId) return res.status(400).json({ error: "A complete team is required to create a league." });
+
     try {
+      // Check if team is complete
+      const teamRs = await db.execute({ sql: "SELECT * FROM teams WHERE id = ? AND user_id = ?", args: [teamId, adminId] });
+      const team = teamRs.rows[0] as any;
+      if (!team || !team.driver1_id || !team.driver2_id || !team.driver3_id || !team.driver4_id || !team.driver5_id || !team.constructor1_id || !team.constructor2_id) {
+        return res.status(400).json({ error: "Selected team is incomplete." });
+      }
+
+      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       const result = await db.execute({ sql: "INSERT INTO leagues (name, invite_code, admin_id) VALUES (?, ?, ?)", args: [name, inviteCode, adminId] });
       const leagueId = Number(result.lastInsertRowid);
-      await db.execute({ sql: "INSERT INTO league_members (league_id, user_id) VALUES (?, ?)", args: [leagueId, adminId] });
+      await db.execute({ sql: "INSERT INTO league_members (league_id, user_id, team_id) VALUES (?, ?, ?)", args: [leagueId, adminId, teamId] });
       res.json({ id: leagueId, inviteCode });
     } catch (e) {
       console.error(e);
@@ -287,19 +315,49 @@ async function start() {
   });
 
   app.post("/api/leagues/join", async (req, res) => {
-    const { inviteCode, userId } = req.body;
+    const { inviteCode, userId, teamId } = req.body;
+    if (!teamId) return res.status(400).json({ error: "A complete team is required to join a league." });
+
     try {
+      // Check if team is complete
+      const teamRs = await db.execute({ sql: "SELECT * FROM teams WHERE id = ? AND user_id = ?", args: [teamId, userId] });
+      const team = teamRs.rows[0] as any;
+      if (!team || !team.driver1_id || !team.driver2_id || !team.driver3_id || !team.driver4_id || !team.driver5_id || !team.constructor1_id || !team.constructor2_id) {
+        return res.status(400).json({ error: "Selected team is incomplete." });
+      }
+
       const rs = await db.execute({ sql: "SELECT id FROM leagues WHERE invite_code = ?", args: [inviteCode] });
       const league = rs.rows[0] as any;
       if (!league) return res.status(404).json({ error: "League not found" });
       
-      await db.execute({ sql: "INSERT INTO league_members (league_id, user_id) VALUES (?, ?)", args: [league.id, userId] });
+      await db.execute({ sql: "INSERT INTO league_members (league_id, user_id, team_id) VALUES (?, ?, ?)", args: [league.id, userId, teamId] });
       res.json({ success: true, leagueId: league.id });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      res.status(500).json({ error: "Failed to join league" });
+      if (e.message && e.message.includes("UNIQUE constraint failed")) {
+        res.status(400).json({ error: "You are already in this league" });
+      } else {
+        res.status(500).json({ error: "Failed to join league" });
+      }
     }
   });
+
+  app.post("/api/leagues/:leagueId/lock", async (req, res) => {
+    const { isLocked, adminId } = req.body;
+    try {
+      const rs = await db.execute({ sql: "SELECT admin_id FROM leagues WHERE id = ?", args: [req.params.leagueId] });
+      const league = rs.rows[0] as any;
+      if (!league) return res.status(404).json({ error: "League not found" });
+      if (league.admin_id !== adminId) return res.status(403).json({ error: "Only the league admin can lock teams." });
+
+      await db.execute({ sql: "UPDATE leagues SET is_locked = ? WHERE id = ?", args: [isLocked ? 1 : 0, req.params.leagueId] });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to update league lock status" });
+    }
+  });
+
   app.get("/api/leagues/:leagueId/standings", async (req, res) => {
     try {
       const rs = await db.execute({
@@ -307,9 +365,10 @@ async function start() {
         SELECT u.name, t.points, 
                t.driver1_id, t.driver2_id, t.driver3_id, t.driver4_id, t.driver5_id, 
                t.constructor1_id, t.constructor2_id 
-        FROM teams t 
-        JOIN users u ON t.user_id = u.id 
-        WHERE t.league_id = ? 
+        FROM league_members lm
+        JOIN teams t ON lm.team_id = t.id 
+        JOIN users u ON lm.user_id = u.id 
+        WHERE lm.league_id = ? 
         ORDER BY t.points DESC
       `,
         args: [req.params.leagueId]
@@ -321,41 +380,95 @@ async function start() {
     }
   });
 
+  app.get("/api/users/:userId/teams", async (req, res) => {
+    try {
+      const rs = await db.execute({ sql: "SELECT * FROM teams WHERE user_id = ?", args: [req.params.userId] });
+      res.json(rs.rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to fetch teams" });
+    }
+  });
+
   app.post("/api/teams", async (req, res) => {
-    const { userId, leagueId, driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id } = req.body;
+    const { id, userId, name, driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id } = req.body;
     
     try {
-      // Check lock status
+      // Check global lock status
       const lockRs = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
       const lockSetting = lockRs.rows[0] as any;
       if (lockSetting && lockSetting.value === 'true') {
-        return res.status(403).json({ error: "Teams are locked by admin" });
+        return res.status(403).json({ error: "Teams are globally locked by admin" });
       }
-      
-      const existingRs = await db.execute({ sql: "SELECT id FROM teams WHERE user_id = ? AND league_id = ?", args: [userId, leagueId] });
-      const existing = existingRs.rows[0];
-      
-      if (existing) {
-        await db.execute({ 
-          sql: "UPDATE teams SET driver1_id = ?, driver2_id = ?, driver3_id = ?, driver4_id = ?, driver5_id = ?, constructor1_id = ?, constructor2_id = ? WHERE user_id = ? AND league_id = ?", 
-          args: [driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, userId, leagueId] 
+
+      if (id) {
+        // Check if team is in any locked leagues
+        const lockedLeaguesRs = await db.execute({
+          sql: "SELECT COUNT(*) as c FROM league_members lm JOIN leagues l ON lm.league_id = l.id WHERE lm.team_id = ? AND l.is_locked = 1",
+          args: [id]
         });
+        if (Number(lockedLeaguesRs.rows[0].c) > 0) {
+          return res.status(403).json({ error: "This team is currently in a locked league and cannot be edited." });
+        }
+
+        // Update existing team
+        await db.execute({ 
+          sql: "UPDATE teams SET name = ?, driver1_id = ?, driver2_id = ?, driver3_id = ?, driver4_id = ?, driver5_id = ?, constructor1_id = ?, constructor2_id = ? WHERE id = ? AND user_id = ?", 
+          args: [name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, id, userId] 
+        });
+        res.json({ success: true, id });
       } else {
-        await db.execute({ 
-          sql: "INSERT INTO teams (user_id, league_id, driver1_id, driver2_id, driver3_id, driver4_id, driver5_id, constructor1_id, constructor2_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-          args: [userId, leagueId, driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id] 
+        // Check count
+        const countRs = await db.execute({ sql: "SELECT COUNT(*) as c FROM teams WHERE user_id = ?", args: [userId] });
+        if (Number(countRs.rows[0].c) >= 5) {
+          return res.status(400).json({ error: "Maximum of 5 teams allowed." });
+        }
+        
+        // Insert new team
+        const rs = await db.execute({ 
+          sql: "INSERT INTO teams (user_id, name, driver1_id, driver2_id, driver3_id, driver4_id, driver5_id, constructor1_id, constructor2_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+          args: [userId, name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id] 
         });
+        res.json({ success: true, id: Number(rs.lastInsertRowid) });
       }
-      res.json({ success: true });
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to save team" });
     }
   });
 
+  app.delete("/api/teams/:teamId", async (req, res) => {
+    try {
+      const teamId = req.params.teamId;
+      
+      // Check lock status
+      const lockRs = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
+      const lockSetting = lockRs.rows[0] as any;
+      if (lockSetting && lockSetting.value === 'true') {
+        return res.status(403).json({ error: "Teams are locked by admin" });
+      }
+
+      // Check if team is in any leagues
+      const inLeagueRs = await db.execute({ sql: "SELECT COUNT(*) as c FROM league_members WHERE team_id = ?", args: [teamId] });
+      if (Number(inLeagueRs.rows[0].c) > 0) {
+        return res.status(400).json({ error: "Cannot delete a team that is currently in a league." });
+      }
+
+      await db.execute({ sql: "DELETE FROM team_race_points WHERE team_id = ?", args: [teamId] });
+      await db.execute({ sql: "DELETE FROM teams WHERE id = ?", args: [teamId] });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to delete team" });
+    }
+  });
+
   app.get("/api/teams/:userId/:leagueId", async (req, res) => {
     try {
-      const rs = await db.execute({ sql: "SELECT * FROM teams WHERE user_id = ? AND league_id = ?", args: [req.params.userId, req.params.leagueId] });
+      const rs = await db.execute({ 
+        sql: "SELECT t.* FROM league_members lm JOIN teams t ON lm.team_id = t.id WHERE lm.user_id = ? AND lm.league_id = ?", 
+        args: [req.params.userId, req.params.leagueId] 
+      });
       res.json(rs.rows[0] || null);
     } catch (e) {
       console.error(e);

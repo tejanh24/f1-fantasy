@@ -240,6 +240,19 @@ function AdminPanel({
     }
   };
 
+  const toggleAdminLeagueLock = async (id: number, currentLockStatus: number) => {
+    try {
+      await safeFetch(`/api/admin/leagues/${id}/lock`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isLocked: currentLockStatus ? 0 : 1 })
+      });
+      fetchLeagues();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!raceName || !poleDriverId || !fastestLapDriverId || finishers.some(f => !f)) {
@@ -287,11 +300,7 @@ function AdminPanel({
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 py-8 max-w-4xl mx-auto"
-    >
+    <div className="space-y-8 py-8 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="text-sm text-white/50 hover:text-white">← BACK</button>
         <div className="flex items-center gap-4">
@@ -344,15 +353,33 @@ function AdminPanel({
             {leagues.map(l => (
               <div key={l.id} className="f1-card p-4 flex justify-between items-center">
                 <div>
-                  <div className="font-bold">{l.name}</div>
+                  <div className="font-bold flex items-center gap-2">
+                    {l.name}
+                    {l.is_locked === 1 && (
+                      <span className="bg-f1-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-white/40 font-mono">CODE: {l.invite_code}</div>
                 </div>
-                <button 
-                  onClick={() => deleteLeague(l.id)}
-                  className="text-f1-red hover:text-white text-xs font-bold uppercase"
-                >
-                  DELETE
-                </button>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => toggleAdminLeagueLock(l.id, l.is_locked)}
+                    className={cn(
+                      "text-xs font-bold uppercase transition-colors",
+                      l.is_locked ? "text-white/50 hover:text-white" : "text-emerald-500 hover:text-emerald-400"
+                    )}
+                  >
+                    {l.is_locked ? 'UNLOCK' : 'LOCK'}
+                  </button>
+                  <button 
+                    onClick={() => deleteLeague(l.id)}
+                    className="text-f1-red hover:text-white text-xs font-bold uppercase"
+                  >
+                    DELETE
+                  </button>
+                </div>
               </div>
             ))}
             {leagues.length === 0 && <div className="text-white/40 italic">No leagues found.</div>}
@@ -476,7 +503,7 @@ function AdminPanel({
           </button>
         </form>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -489,11 +516,15 @@ export default function App() {
   const [constructors, setConstructors] = useState<Constructor[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [myTeam, setMyTeam] = useState<Team | null>(null);
+  const [myTeams, setMyTeams] = useState<Team[]>([]);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamsLocked, setTeamsLocked] = useState(false);
 
   // Draft state
+  const [draftName, setDraftName] = useState('');
   const [draftDrivers, setDraftDrivers] = useState<string[]>([]);
   const [draftConstructors, setDraftConstructors] = useState<string[]>([]);
 
@@ -508,6 +539,7 @@ export default function App() {
         setUser(parsed);
         setView('dashboard');
         fetchLeagues(parsed.id);
+        fetchMyTeams(parsed.id);
       } catch (e) {
         localStorage.removeItem('f1_user');
       }
@@ -524,6 +556,15 @@ export default function App() {
     };
     init();
   }, []);
+
+  const fetchMyTeams = async (userId: number) => {
+    try {
+      const data = await safeFetch(`/api/users/${userId}/teams`);
+      if (data) setMyTeams(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchLockStatus = async () => {
     try {
@@ -589,6 +630,7 @@ export default function App() {
         localStorage.setItem('f1_user', JSON.stringify(userData));
         setView('dashboard');
         fetchLeagues(userData.id);
+        fetchMyTeams(userData.id);
       }
     } catch (err: any) {
       setError(err.message || "Failed to login. Please check your connection.");
@@ -604,12 +646,19 @@ export default function App() {
     setError(null);
     const formData = new FormData(e.currentTarget);
     const name = formData.get('leagueName') as string;
+    const teamId = formData.get('teamId') as string;
+
+    if (!teamId) {
+      setError("Please select a team to join the league.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const data = await safeFetch('/api/leagues', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, adminId: user.id })
+        body: JSON.stringify({ name, adminId: user.id, teamId: Number(teamId) })
       });
       
       if (data) {
@@ -630,12 +679,19 @@ export default function App() {
     setError(null);
     const formData = new FormData(e.currentTarget);
     const inviteCode = formData.get('inviteCode') as string;
+    const teamId = formData.get('teamId') as string;
+
+    if (!teamId) {
+      setError("Please select a team to join the league.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const data = await safeFetch('/api/leagues/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteCode, userId: user.id })
+        body: JSON.stringify({ inviteCode, userId: user.id, teamId: Number(teamId) })
       });
       
       if (data) {
@@ -678,8 +734,29 @@ export default function App() {
     }
   };
 
+  const toggleLeagueLock = async () => {
+    if (!selectedLeague || !user || selectedLeague.admin_id !== user.id) return;
+    setLoading(true);
+    try {
+      const newLockStatus = selectedLeague.is_locked ? 0 : 1;
+      const data = await safeFetch(`/api/leagues/${selectedLeague.id}/lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isLocked: newLockStatus, adminId: user.id })
+      });
+      if (data) {
+        setSelectedLeague({ ...selectedLeague, is_locked: newLockStatus });
+        await fetchLeagues(user.id);
+      }
+    } catch (err: any) {
+      setError("Failed to toggle league lock. " + (err.message || ""));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const saveTeam = async () => {
-    if (!user || !selectedLeague || draftDrivers.length !== 5 || draftConstructors.length !== 2) return;
+    if (!user) return;
     setLoading(true);
     setError(null);
     try {
@@ -687,26 +764,67 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: editingTeam?.id,
           userId: user.id,
-          leagueId: selectedLeague.id,
-          driver1Id: draftDrivers[0],
-          driver2Id: draftDrivers[1],
-          driver3Id: draftDrivers[2],
-          driver4Id: draftDrivers[3],
-          driver5Id: draftDrivers[4],
-          constructor1Id: draftConstructors[0],
-          constructor2Id: draftConstructors[1]
+          name: draftName || 'My Team',
+          driver1Id: draftDrivers[0] || null,
+          driver2Id: draftDrivers[1] || null,
+          driver3Id: draftDrivers[2] || null,
+          driver4Id: draftDrivers[3] || null,
+          driver5Id: draftDrivers[4] || null,
+          constructor1Id: draftConstructors[0] || null,
+          constructor2Id: draftConstructors[1] || null
         })
       });
       
       if (data) {
-        await openLeague(selectedLeague);
+        await fetchMyTeams(user.id);
+        if (selectedLeague) {
+          await openLeague(selectedLeague);
+        } else {
+          setView('dashboard');
+        }
       }
     } catch (err: any) {
       setError("Failed to save team. " + (err.message || ""));
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmDeleteTeam = async () => {
+    if (!user || !teamToDelete) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await safeFetch(`/api/teams/${teamToDelete.id}`, {
+        method: 'DELETE'
+      });
+      if (data) {
+        await fetchMyTeams(user.id);
+        setTeamToDelete(null);
+      }
+    } catch (err: any) {
+      setError("Failed to delete team. " + (err.message || ""));
+      setTeamToDelete(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openDraft = (team?: Team) => {
+    if (team) {
+      setEditingTeam(team);
+      setDraftName(team.name || 'My Team');
+      setDraftDrivers([team.driver1_id, team.driver2_id, team.driver3_id, team.driver4_id, team.driver5_id].filter(Boolean));
+      setDraftConstructors([team.constructor1_id, team.constructor2_id].filter(Boolean));
+    } else {
+      setEditingTeam(null);
+      setDraftName('');
+      setDraftDrivers([]);
+      setDraftConstructors([]);
+    }
+    setView('draft');
   };
 
   const currentSpend = () => {
@@ -797,16 +915,23 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4">
         <AnimatePresence mode="wait">
           {view === 'admin' && (
-            <AdminPanel 
-              drivers={drivers} 
-              onBack={() => setView('dashboard')} 
-              onSuccess={() => {
-                setView('dashboard');
-                // Refresh data if needed
-              }}
-              teamsLocked={teamsLocked}
-              onToggleLock={toggleLock}
-            />
+            <motion.div
+              key="admin"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <AdminPanel 
+                drivers={drivers} 
+                onBack={() => setView('dashboard')} 
+                onSuccess={() => {
+                  setView('dashboard');
+                  // Refresh data if needed
+                }}
+                teamsLocked={teamsLocked}
+                onToggleLock={toggleLock}
+              />
+            </motion.div>
           )}
 
           {view === 'landing' && (
@@ -865,43 +990,125 @@ export default function App() {
               key="dashboard"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="space-y-8 py-8"
+              exit={{ opacity: 0 }}
+              className="space-y-12 py-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-3xl">YOUR LEAGUES</h2>
-                  <p className="text-white/50">Compete with your friends in private groups</p>
+              {/* MY TEAMS SECTION */}
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h2 className="text-3xl">YOUR TEAMS</h2>
+                    <p className="text-white/50">Manage up to 5 teams to use in different leagues</p>
+                  </div>
+                  {myTeams.length < 5 && (
+                    <button 
+                      onClick={() => openDraft()}
+                      className="f1-button flex items-center gap-2 text-sm px-4 py-2"
+                    >
+                      <Plus className="w-4 h-4" /> CREATE NEW TEAM
+                    </button>
+                  )}
                 </div>
-                <button 
-                  onClick={() => setView('results')}
-                  className="f1-button flex items-center gap-2 text-sm px-4 py-2"
-                >
-                  <Trophy className="w-4 h-4" /> VIEW RACE RESULTS
-                </button>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {myTeams.map(team => {
+                    const isComplete = team.driver1_id && team.driver2_id && team.driver3_id && team.driver4_id && team.driver5_id && team.constructor1_id && team.constructor2_id;
+                    return (
+                      <div key={team.id} className="relative group">
+                        <button 
+                          onClick={() => openDraft(team)}
+                          className="f1-card p-6 text-left hover:bg-f1-gray/50 flex flex-col justify-between w-full h-full"
+                        >
+                          <div>
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="text-xl font-bold italic group-hover:text-f1-red transition-colors">{team.name || 'My Team'}</h3>
+                              <span className={cn("text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider", isComplete ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400")}>
+                                {isComplete ? 'Complete' : 'Incomplete'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-white/40">Click to edit roster</p>
+                          </div>
+                          <div className="mt-4 flex -space-x-2">
+                            {[team.driver1_id, team.driver2_id, team.driver3_id, team.driver4_id, team.driver5_id].map((id, i) => {
+                              const d = drivers.find(item => item.id === id);
+                              return d ? (
+                                <img key={i} src={d.image} className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray" alt={d.name} />
+                              ) : null;
+                            })}
+                          </div>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTeamToDelete(team);
+                          }}
+                          className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-f1-red text-white rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
+                          title="Delete Team"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {myTeams.length === 0 && (
+                    <div className="col-span-full text-center p-8 text-white/20 italic border border-dashed border-white/10 rounded-xl">
+                      You haven't created any teams yet. Create one to join a league!
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Create/Join Card */}
-                <div className="f1-card p-6 flex flex-col gap-6">
+              {/* LEAGUES SECTION */}
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
-                    <h3 className="text-lg mb-4 flex items-center gap-2">
-                      <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
-                    </h3>
-                    <form onSubmit={handleCreateLeague} className="space-y-3">
-                      <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" autoComplete="off"/>
-                      <button className="f1-button w-full text-sm py-2">CREATE</button>
-                    </form>
+                    <h2 className="text-3xl">YOUR LEAGUES</h2>
+                    <p className="text-white/50">Compete with your friends in private groups</p>
                   </div>
-                  <div className="border-t border-white/10 pt-6">
-                    <h3 className="text-lg mb-4 flex items-center gap-2">
-                      <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
-                    </h3>
-                    <form onSubmit={handleJoinLeague} className="space-y-3">
-                      <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" autoComplete="off"/>
-                      <button className="f1-button w-full text-sm py-2 bg-white text-f1-dark hover:bg-white/90">JOIN</button>
-                    </form>
-                  </div>
+                  <button 
+                    onClick={() => setView('results')}
+                    className="f1-button flex items-center gap-2 text-sm px-4 py-2 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    <Trophy className="w-4 h-4" /> VIEW RACE RESULTS
+                  </button>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Create/Join Card */}
+                  <div className="f1-card p-6 flex flex-col gap-6">
+                    <div>
+                      <h3 className="text-lg mb-4 flex items-center gap-2">
+                        <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
+                      </h3>
+                      <form onSubmit={handleCreateLeague} className="space-y-3">
+                        <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" />
+                        <select name="teamId" required className="f1-input w-full text-sm">
+                          <option value="">Select a Team...</option>
+                          {myTeams.map(t => {
+                            const isComplete = t.driver1_id && t.driver2_id && t.driver3_id && t.driver4_id && t.driver5_id && t.constructor1_id && t.constructor2_id;
+                            return <option key={t.id} value={t.id} disabled={!isComplete}>{t.name} {!isComplete ? '(Incomplete)' : ''}</option>;
+                          })}
+                        </select>
+                        <button className="f1-button w-full text-sm py-2">CREATE</button>
+                      </form>
+                    </div>
+                    <div className="border-t border-white/10 pt-6">
+                      <h3 className="text-lg mb-4 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
+                      </h3>
+                      <form onSubmit={handleJoinLeague} className="space-y-3">
+                        <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" />
+                        <select name="teamId" required className="f1-input w-full text-sm">
+                          <option value="">Select a Team...</option>
+                          {myTeams.map(t => {
+                            const isComplete = t.driver1_id && t.driver2_id && t.driver3_id && t.driver4_id && t.driver5_id && t.constructor1_id && t.constructor2_id;
+                            return <option key={t.id} value={t.id} disabled={!isComplete}>{t.name} {!isComplete ? '(Incomplete)' : ''}</option>;
+                          })}
+                        </select>
+                        <button className="f1-button w-full text-sm py-2 bg-white text-f1-dark hover:bg-white/90">JOIN</button>
+                      </form>
+                    </div>
+                  </div>
 
                 {/* League List */}
                 <div className="md:col-span-2 space-y-6">
@@ -933,7 +1140,8 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
+          </motion.div>
           )}
 
           {view === 'results' && (
@@ -941,6 +1149,7 @@ export default function App() {
               key="results"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
               className="space-y-8 py-8"
             >
               <div className="flex items-center justify-between">
@@ -968,6 +1177,7 @@ export default function App() {
               key="league"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
               className="space-y-8 py-8"
             >
               <div className="flex items-center justify-between">
@@ -993,24 +1203,42 @@ export default function App() {
 
               <div className="flex flex-col md:flex-row justify-between items-end gap-6">
                 <div>
-                  <h1 className="text-5xl italic">{selectedLeague.name}</h1>
+                  <div className="flex items-center gap-4 mb-2">
+                    <h1 className="text-5xl italic">{selectedLeague.name}</h1>
+                    {selectedLeague.is_locked === 1 && (
+                      <span className="bg-f1-red text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wider flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <p className="text-white/50">League Standings & Team Management</p>
                 </div>
-                <button 
-                  onClick={() => setView('draft')}
-                  disabled={teamsLocked}
-                  className="f1-button flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {teamsLocked ? (
-                    <>
-                      <ShieldCheck className="w-5 h-5" /> TEAMS LOCKED
-                    </>
-                  ) : (
-                    <>
-                      <Car className="w-5 h-5" /> {myTeam ? 'MANAGE TEAM' : 'DRAFT TEAM'}
-                    </>
+                <div className="flex items-center gap-4">
+                  {user?.id === selectedLeague.admin_id && (
+                    <button 
+                      onClick={toggleLeagueLock}
+                      className="f1-button bg-white/10 hover:bg-white/20 text-white flex items-center gap-2"
+                    >
+                      <ShieldCheck className="w-5 h-5" /> 
+                      {selectedLeague.is_locked ? 'UNLOCK LEAGUE' : 'LOCK LEAGUE'}
+                    </button>
                   )}
-                </button>
+                  <button 
+                    onClick={() => myTeam ? openDraft(myTeam) : openDraft()}
+                    disabled={teamsLocked || selectedLeague.is_locked === 1}
+                    className="f1-button flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {teamsLocked || selectedLeague.is_locked === 1 ? (
+                      <>
+                        <ShieldCheck className="w-5 h-5" /> TEAMS LOCKED
+                      </>
+                    ) : (
+                      <>
+                        <Car className="w-5 h-5" /> {myTeam ? 'MANAGE TEAM' : 'DRAFT TEAM'}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1131,7 +1359,7 @@ export default function App() {
                       <Car className="w-12 h-12 text-white/10" />
                       <p className="text-sm text-white/40">You haven't drafted a team for this league yet.</p>
                       <button 
-                        onClick={() => setView('draft')} 
+                        onClick={() => openDraft()} 
                         disabled={teamsLocked}
                         className="f1-button text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -1223,20 +1451,30 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          {view === 'draft' && selectedLeague && (
+          {view === 'draft' && (
             <motion.div 
               key="draft"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               className="space-y-8 py-8"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <button 
-                  onClick={() => setView('league')}
+                  onClick={() => selectedLeague ? setView('league') : setView('dashboard')}
                   className="text-sm text-white/50 hover:text-white flex items-center gap-1"
                 >
-                  ← BACK TO LEAGUE
+                  ← BACK TO {selectedLeague ? 'LEAGUE' : 'DASHBOARD'}
                 </button>
+                <div className="flex-1 max-w-md mx-4">
+                  <input 
+                    type="text" 
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    placeholder="Enter Team Name..."
+                    className="f1-input w-full text-xl font-bold italic text-center bg-transparent border-b-2 border-white/20 focus:border-f1-red rounded-none px-0"
+                  />
+                </div>
                 <div className="flex items-center gap-6">
                   <div className="flex flex-col items-end">
                     <span className="text-xs text-white/40 uppercase font-mono">Budget Remaining</span>
@@ -1249,10 +1487,10 @@ export default function App() {
                   </div>
                   <button 
                     onClick={saveTeam}
-                    disabled={draftDrivers.length !== 5 || draftConstructors.length !== 2 || currentSpend() > BUDGET_LIMIT || teamsLocked}
+                    disabled={currentSpend() > BUDGET_LIMIT || teamsLocked || (selectedLeague && selectedLeague.is_locked === 1)}
                     className="f1-button disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {teamsLocked ? "LOCKED" : "SAVE TEAM"}
+                    {teamsLocked || (selectedLeague && selectedLeague.is_locked === 1) ? "LOCKED" : "SAVE TEAM"}
                   </button>
                 </div>
               </div>
@@ -1408,6 +1646,47 @@ export default function App() {
           Debug: Drivers: {drivers.length} | Constructors: {constructors.length} | User: {user ? user.name : 'None'}
         </div>
       </footer>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {teamToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setTeamToDelete(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="f1-card w-full max-w-md p-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <h2 className="text-2xl italic mb-4">DELETE TEAM?</h2>
+              <p className="text-white/70 mb-6">
+                Are you sure you want to delete <strong className="text-white">{teamToDelete.name || 'My Team'}</strong>? This action cannot be undone.
+              </p>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setTeamToDelete(null)}
+                  className="flex-1 py-3 px-4 rounded-lg font-bold uppercase tracking-widest text-sm bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button 
+                  onClick={confirmDeleteTeam}
+                  disabled={loading}
+                  className="flex-1 py-3 px-4 rounded-lg font-bold uppercase tracking-widest text-sm bg-f1-red hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'DELETING...' : 'DELETE'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -24,6 +24,7 @@ export interface League {
   name: string;
   invite_code: string;
   admin_id: number;
+  is_locked: number;
 }
 
 export interface Standing {
@@ -41,7 +42,8 @@ export interface Standing {
 export interface Team {
   id: number;
   user_id: number;
-  league_id: number;
+  league_id?: number;
+  name?: string;
   driver1_id: string;
   driver2_id: string;
   driver3_id: string;
@@ -51,3 +53,4 @@ export interface Team {
   constructor2_id: string;
   points: number;
 }
+
