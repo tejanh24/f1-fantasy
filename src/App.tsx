@@ -1081,7 +1081,7 @@ export default function App() {
                         <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
                       </h3>
                       <form onSubmit={handleCreateLeague} className="space-y-3">
-                        <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" />
+                        <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" autoComplete="off"/>
                         <select name="teamId" required className="f1-input w-full text-sm">
                           <option value="">Select a Team...</option>
                           {myTeams.map(t => {
@@ -1097,7 +1097,7 @@ export default function App() {
                         <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
                       </h3>
                       <form onSubmit={handleJoinLeague} className="space-y-3">
-                        <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" />
+                        <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" autoComplete="off"/>
                         <select name="teamId" required className="f1-input w-full text-sm">
                           <option value="">Select a Team...</option>
                           {myTeams.map(t => {
