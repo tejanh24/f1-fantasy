@@ -37,6 +37,8 @@ export interface Standing {
   driver5_id: string;
   constructor1_id: string;
   constructor2_id: string;
+  turbo_driver_id?: string;
+  is_complete: number;
 }
 
 export interface Team {
@@ -51,6 +53,7 @@ export interface Team {
   driver5_id: string;
   constructor1_id: string;
   constructor2_id: string;
+  turbo_driver_id?: string;
   points: number;
+  is_complete: number;
 }
-

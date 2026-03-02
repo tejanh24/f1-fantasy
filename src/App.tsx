@@ -521,7 +521,7 @@ function AdminPanel({
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'landing' | 'dashboard' | 'league' | 'draft' | 'admin' | 'results'>('landing');
+  const [view, setView] = useState<'landing' | 'dashboard' | 'league' | 'draft' | 'admin' | 'results' | 'scoring'>('landing');
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -539,6 +539,7 @@ export default function App() {
   const [draftName, setDraftName] = useState('');
   const [draftDrivers, setDraftDrivers] = useState<string[]>([]);
   const [draftConstructors, setDraftConstructors] = useState<string[]>([]);
+  const [draftTurboDriverId, setDraftTurboDriverId] = useState<string | null>(null);
 
   const [races, setRaces] = useState<any[]>([]);
   const [viewingTeam, setViewingTeam] = useState<Standing | null>(null);
@@ -731,11 +732,17 @@ export default function App() {
       setMyTeam(tData); // tData can be null if no team exists
       
       if (tData) {
+        setDraftName(tData.name || 'My Team');
         setDraftDrivers([tData.driver1_id, tData.driver2_id, tData.driver3_id, tData.driver4_id, tData.driver5_id].filter(Boolean));
         setDraftConstructors([tData.constructor1_id, tData.constructor2_id].filter(Boolean));
+        setDraftTurboDriverId(tData.turbo_driver_id || null);
+        setEditingTeam(tData);
       } else {
+        setDraftName('');
         setDraftDrivers([]);
         setDraftConstructors([]);
+        setDraftTurboDriverId(null);
+        setEditingTeam(null);
       }
       
       setView('league');
@@ -785,7 +792,8 @@ export default function App() {
           driver4Id: draftDrivers[3] || null,
           driver5Id: draftDrivers[4] || null,
           constructor1Id: draftConstructors[0] || null,
-          constructor2Id: draftConstructors[1] || null
+          constructor2Id: draftConstructors[1] || null,
+          turboDriverId: draftTurboDriverId
         })
       });
       
@@ -830,11 +838,13 @@ export default function App() {
       setDraftName(team.name || 'My Team');
       setDraftDrivers([team.driver1_id, team.driver2_id, team.driver3_id, team.driver4_id, team.driver5_id].filter(Boolean));
       setDraftConstructors([team.constructor1_id, team.constructor2_id].filter(Boolean));
+      setDraftTurboDriverId(team.turbo_driver_id || null);
     } else {
       setEditingTeam(null);
       setDraftName('');
       setDraftDrivers([]);
       setDraftConstructors([]);
+      setDraftTurboDriverId(null);
     }
     setView('draft');
   };
@@ -1047,7 +1057,7 @@ export default function App() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {myTeams.map(team => {
-                    const isComplete = team.driver1_id && team.driver2_id && team.driver3_id && team.driver4_id && team.driver5_id && team.constructor1_id && team.constructor2_id;
+                    const isComplete = team.is_complete === 1;
                     return (
                       <div key={team.id} className="relative group">
                         <button 
@@ -1306,7 +1316,14 @@ export default function App() {
                               {idx + 1}
                             </td>
                             <td className="px-6 py-4">
-                              <div className="font-bold">{s.name}</div>
+                              <div className="font-bold flex items-center gap-2">
+                                {s.name}
+                                {s.is_complete === 0 && (
+                                  <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                    Incomplete
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex -space-x-2">
@@ -1355,6 +1372,11 @@ export default function App() {
                 <div className="space-y-4">
                   <h3 className="text-lg font-bold flex items-center gap-2">
                     <ShieldCheck className="w-5 h-5 text-f1-red" /> YOUR TEAM
+                    {myTeam && myTeam.is_complete === 0 && (
+                      <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        Incomplete
+                      </span>
+                    )}
                   </h3>
                   {myTeam ? (
                     <div className="f1-card p-6 space-y-6">
@@ -1362,10 +1384,17 @@ export default function App() {
                         {[myTeam.driver1_id, myTeam.driver2_id, myTeam.driver3_id, myTeam.driver4_id, myTeam.driver5_id].map((id, i) => {
                           const d = drivers.find(item => item.id === id);
                           return d ? (
-                            <div key={i} className="flex items-center gap-4 p-3 bg-white/5 rounded-lg">
+                            <div key={i} className="flex items-center gap-4 p-3 bg-white/5 rounded-lg relative">
                               <img src={d.image} className="w-12 h-12 rounded-full bg-f1-gray" alt="" />
                               <div>
-                                <div className="text-xs text-white/40 uppercase font-mono">Driver {i + 1}</div>
+                                <div className="text-xs text-white/40 uppercase font-mono flex items-center gap-1">
+                                  Driver {i + 1}
+                                  {myTeam.turbo_driver_id === id && (
+                                    <span className="text-f1-red font-bold flex items-center gap-1">
+                                      <Zap className="w-3 h-3 fill-current" /> 2x
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="font-bold">{d.name}</div>
                               </div>
                             </div>
@@ -1447,10 +1476,17 @@ export default function App() {
                         {[viewingTeam.driver1_id, viewingTeam.driver2_id, viewingTeam.driver3_id, viewingTeam.driver4_id, viewingTeam.driver5_id].map((id, i) => {
                           const d = drivers.find(item => item.id === id);
                           return d ? (
-                            <div key={i} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/5">
+                            <div key={i} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/5 relative">
                               <img src={d.image} className="w-16 h-16 rounded-full bg-f1-gray object-cover" alt="" />
                               <div>
-                                <div className="text-xs text-white/40 uppercase font-mono mb-1">Driver {i + 1}</div>
+                                <div className="text-xs text-white/40 uppercase font-mono mb-1 flex items-center gap-2">
+                                  Driver {i + 1}
+                                  {viewingTeam.turbo_driver_id === id && (
+                                    <span className="bg-f1-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                                      <Zap className="w-3 h-3 fill-current" /> TURBO
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="font-bold text-lg leading-none">{d.name}</div>
                                 <div className="text-xs text-f1-red mt-1">{constructors.find(c => c.id === d.constructor_id)?.name}</div>
                               </div>
@@ -1573,6 +1609,46 @@ export default function App() {
                     </div>
                   </section>
 
+                  {/* Turbo Driver Selection */}
+                  {draftDrivers.length === 5 && (
+                    <section>
+                      <h3 className="text-2xl italic mb-6 flex items-center gap-3">
+                        <Zap className="w-6 h-6 text-f1-red fill-current" /> SELECT TURBO DRIVER (2x POINTS)
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {draftDrivers.map(id => {
+                          const driver = drivers.find(d => d.id === id);
+                          if (!driver) return null;
+                          const isTurbo = draftTurboDriverId === id;
+                          
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => setDraftTurboDriverId(id)}
+                              className={cn(
+                                "f1-card p-4 flex items-center gap-4 text-left relative transition-all",
+                                isTurbo ? "border-f1-red bg-f1-red/10 ring-2 ring-f1-red" : "hover:bg-white/5"
+                              )}
+                            >
+                              <img src={driver.image} className="w-12 h-12 rounded-full bg-f1-gray" alt={driver.name} />
+                              <div className="flex-1">
+                                <div className="font-bold">{driver.name}</div>
+                                <div className="text-xs text-white/50">
+                                  {isTurbo ? "2x POINTS ACTIVE" : "Select for 2x Points"}
+                                </div>
+                              </div>
+                              {isTurbo && (
+                                <div className="absolute top-2 right-2 bg-f1-red p-1 rounded-full">
+                                  <Zap className="w-3 h-3 text-white fill-current" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
+
                   {/* Constructors */}
                   <section>
                     <h3 className="text-2xl italic mb-6 flex items-center gap-3">
@@ -1664,6 +1740,137 @@ export default function App() {
               </div>
             </motion.div>
           )}
+          {view === 'scoring' && (
+            <motion.div 
+              key="scoring"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8 py-8"
+            >
+              <div className="flex items-center justify-between">
+                <button 
+                  onClick={() => user ? setView('dashboard') : setView('landing')}
+                  className="text-sm text-white/50 hover:text-white flex items-center gap-1"
+                >
+                  ← BACK
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row justify-between items-end gap-6">
+                <div>
+                  <h1 className="text-5xl italic">SCORING RULES</h1>
+                  <p className="text-white/50">How points are awarded in F1 Fantasy Pro</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="f1-card p-6 space-y-6">
+                  <h3 className="text-xl font-bold flex items-center gap-2 border-b border-white/10 pb-4">
+                    <Trophy className="w-5 h-5 text-f1-red" /> RACE FINISH
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span>1st Place</span>
+                      <span className="font-mono font-bold text-f1-red">10 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>2nd Place</span>
+                      <span className="font-mono font-bold text-f1-red">9 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>3rd Place</span>
+                      <span className="font-mono font-bold text-f1-red">8 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>4th Place</span>
+                      <span className="font-mono font-bold text-f1-red">7 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>5th Place</span>
+                      <span className="font-mono font-bold text-f1-red">6 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>6th Place</span>
+                      <span className="font-mono font-bold text-f1-red">5 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>7th Place</span>
+                      <span className="font-mono font-bold text-f1-red">4 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>8th Place</span>
+                      <span className="font-mono font-bold text-f1-red">3 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>9th Place</span>
+                      <span className="font-mono font-bold text-f1-red">2 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>10th Place</span>
+                      <span className="font-mono font-bold text-f1-red">1 pt</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-8">
+                  <div className="f1-card p-6 space-y-6">
+                    <h3 className="text-xl font-bold flex items-center gap-2 border-b border-white/10 pb-4">
+                      <Zap className="w-5 h-5 text-f1-red" /> BONUSES
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span>Pole Position</span>
+                        <span className="font-mono font-bold text-emerald-400">+5 pts</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Fastest Lap</span>
+                        <span className="font-mono font-bold text-emerald-400">+5 pts</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Race Completion</span>
+                        <span className="font-mono font-bold text-emerald-400">+0 pts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="f1-card p-6 space-y-6">
+                    <h3 className="text-xl font-bold flex items-center gap-2 border-b border-white/10 pb-4">
+                      <ShieldCheck className="w-5 h-5 text-f1-red" /> PENALTIES
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span>Did Not Finish (DNF)</span>
+                        <span className="font-mono font-bold text-f1-red">-5 pts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="f1-card p-6 space-y-4 bg-f1-red/10 border border-f1-red/20">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-f1-red fill-current" /> TURBO DRIVER
+                    </h3>
+                    <p className="text-sm text-white/80 leading-relaxed">
+                      Your selected Turbo Driver earns <span className="font-bold text-white">DOUBLE POINTS (2x)</span> for the entire race weekend, including race finish, qualifying, and fastest lap bonuses.
+                    </p>
+                    <div className="text-xs font-mono text-f1-red/80 border-t border-f1-red/20 pt-4 mt-4">
+                      NOTE: Any driver can be selected as your Turbo Driver regardless of price.
+                    </div>
+                  </div>
+
+                  <div className="f1-card p-6 space-y-4 bg-white/5">
+                    <h3 className="text-lg font-bold">CONSTRUCTOR SCORING</h3>
+                    <p className="text-sm text-white/60 leading-relaxed">
+                      Constructors earn the combined points of both their drivers for the race finish position. They do NOT earn points for Pole Position or Fastest Lap bonuses.
+                    </p>
+                    <div className="text-xs font-mono text-white/40 border-t border-white/10 pt-4 mt-4">
+                      EXAMPLE: If Ferrari drivers finish 1st (10pts) and 3rd (8pts), the Ferrari Constructor earns 18 points.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
@@ -1672,8 +1879,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-white/30 text-xs font-mono">
           <p>© 2026 F1 FANTASY PRO. NOT AFFILIATED WITH FORMULA 1.</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-f1-red transition-colors">RULES</a>
-            <a href="#" className="hover:text-f1-red transition-colors">SCORING</a>
+            <button onClick={() => setView('scoring')} className="hover:text-f1-red transition-colors">RULES</button>
+            <button onClick={() => setView('scoring')} className="hover:text-f1-red transition-colors">SCORING</button>
             <a href="#" className="hover:text-f1-red transition-colors">SUPPORT</a>
           </div>
         </div>
@@ -1725,4 +1932,3 @@ export default function App() {
     </div>
   );
 }
-
