@@ -14,7 +14,8 @@ import {
   DollarSign,
   User as UserIcon,
   Copy,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -311,7 +312,7 @@ function AdminPanel({
               teamsLocked ? "bg-f1-red text-white" : "bg-emerald-500 text-white"
             )}
           >
-            {teamsLocked ? "UNLOCK TEAMS" : "LOCK TEAMS"}
+            {teamsLocked ? "UNLOCK LEAGUES" : "LOCK LEAGUES"}
           </button>
           <div className="flex bg-white/5 rounded-lg p-1">
             <button 
@@ -913,6 +914,24 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4">
+        <AnimatePresence>
+          {error && view !== 'landing' && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mb-6 bg-f1-red/20 border border-f1-red text-f1-red p-4 rounded-lg font-bold flex justify-between items-center"
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5" />
+                <span>{error}</span>
+              </div>
+              <button onClick={() => setError(null)} className="hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <AnimatePresence mode="wait">
           {view === 'admin' && (
             <motion.div
@@ -1081,7 +1100,7 @@ export default function App() {
                         <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
                       </h3>
                       <form onSubmit={handleCreateLeague} className="space-y-3">
-                        <input name="leagueName" required className="f1-input w-full text-sm" placeholder="League Name" />
+                        <input name="leagueName" autoComplete="off" required className="f1-input w-full text-sm" placeholder="League Name" />
                         <select name="teamId" required className="f1-input w-full text-sm">
                           <option value="">Select a Team...</option>
                           {myTeams.map(t => {
@@ -1097,7 +1116,7 @@ export default function App() {
                         <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
                       </h3>
                       <form onSubmit={handleJoinLeague} className="space-y-3">
-                        <input name="inviteCode" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" />
+                        <input name="inviteCode" autoComplete="off" required className="f1-input w-full text-sm" placeholder="Invite Code (e.g. AB12CD)" />
                         <select name="teamId" required className="f1-input w-full text-sm">
                           <option value="">Select a Team...</option>
                           {myTeams.map(t => {
@@ -1230,7 +1249,7 @@ export default function App() {
                   >
                     {teamsLocked || selectedLeague.is_locked === 1 ? (
                       <>
-                        <ShieldCheck className="w-5 h-5" /> TEAMS LOCKED
+                        <ShieldCheck className="w-5 h-5" /> LEAGUE LOCKED
                       </>
                     ) : (
                       <>
@@ -1360,10 +1379,10 @@ export default function App() {
                       <p className="text-sm text-white/40">You haven't drafted a team for this league yet.</p>
                       <button 
                         onClick={() => openDraft()} 
-                        disabled={teamsLocked}
+                        disabled={teamsLocked || selectedLeague.is_locked === 1}
                         className="f1-button text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {teamsLocked ? "TEAMS LOCKED" : "DRAFT NOW"}
+                        {teamsLocked || selectedLeague.is_locked === 1 ? "LEAGUE LOCKED" : "DRAFT NOW"}
                       </button>
                     </div>
                   )}
