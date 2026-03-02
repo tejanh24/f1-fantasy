@@ -11,42 +11,42 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DRIVERS_DATA = [
-  { id: "verstappen", name: "Max Verstappen", constructor_id: "red_bull", price: 30.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/M/MAXVER01_Max_Verstappen/maxver01.png.transform/2col-retina/image.png" },
-  { id: "hadjar", name: "Isack Hadjar", constructor_id: "red_bull", price: 10.0, image: "https://placehold.co/400x400?text=Isack+Hadjar" },
-  { id: "norris", name: "Lando Norris", constructor_id: "mclaren", price: 28.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LANNOR01_Lando_Norris/lannor01.png.transform/2col-retina/image.png" },
-  { id: "piastri", name: "Oscar Piastri", constructor_id: "mclaren", price: 25.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/O/OSCPIA01_Oscar_Piastri/oscpia01.png.transform/2col-retina/image.png" },
-  { id: "leclerc", name: "Charles Leclerc", constructor_id: "ferrari", price: 27.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/C/CHALEC01_Charles_Leclerc/chalec01.png.transform/2col-retina/image.png" },
-  { id: "hamilton", name: "Lewis Hamilton", constructor_id: "ferrari", price: 26.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LEWHAM01_Lewis_Hamilton/lewham01.png.transform/2col-retina/image.png" },
-  { id: "russell", name: "George Russell", constructor_id: "mercedes", price: 24.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/G/GEORUS01_George_Russell/georus01.png.transform/2col-retina/image.png" },
-  { id: "antonelli", name: "Kimi Antonelli", constructor_id: "mercedes", price: 15.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/K/KIMANT01_Kimi_Antonelli/kimant01.png.transform/2col-retina/image.png" },
-  { id: "sainz", name: "Carlos Sainz", constructor_id: "williams", price: 22.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/C/CARSAI01_Carlos_Sainz/carsai01.png.transform/2col-retina/image.png" },
-  { id: "albon", name: "Alexander Albon", constructor_id: "williams", price: 16.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/A/ALEALB01_Alexander_Albon/alealb01.png.transform/2col-retina/image.png" },
-  { id: "alonso", name: "Fernando Alonso", constructor_id: "aston_martin", price: 20.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/F/FERALO01_Fernando_Alonso/feralo01.png.transform/2col-retina/image.png" },
-  { id: "stroll", name: "Lance Stroll", constructor_id: "aston_martin", price: 11.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LANSTR01_Lance_Stroll/lanstr01.png.transform/2col-retina/image.png" },
-  { id: "gasly", name: "Pierre Gasly", constructor_id: "alpine", price: 18.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/P/PIEGAS01_Pierre_Gasly/piegas01.png.transform/2col-retina/image.png" },
-  { id: "colapinto", name: "Franco Colapinto", constructor_id: "alpine", price: 11.0, image: "https://placehold.co/400x400?text=Franco+Colapinto" },
-  { id: "ocon", name: "Esteban Ocon", constructor_id: "haas", price: 15.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/E/ESTOCO01_Esteban_Ocon/estoco01.png.transform/2col-retina/image.png" },
-  { id: "bearman", name: "Oliver Bearman", constructor_id: "haas", price: 12.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/O/OLIBEA01_Oliver_Bearman/olibea01.png.transform/2col-retina/image.png" },
-  { id: "perez", name: "Sergio Perez", constructor_id: "cadillac", price: 14.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/S/SERPER01_Sergio_Perez/serper01.png.transform/2col-retina/image.png" },
-  { id: "bottas", name: "Valtteri Bottas", constructor_id: "cadillac", price: 13.0, image: "https://placehold.co/400x400?text=Valtteri+Bottas" },
-  { id: "hulkenberg", name: "Nico Hulkenberg", constructor_id: "audi", price: 12.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/N/NICHUL01_Nico_Hulkenberg/nichul01.png.transform/2col-retina/image.png" },
-  { id: "bortoleto", name: "Gabriel Bortoleto", constructor_id: "audi", price: 10.0, image: "https://placehold.co/400x400?text=Gabriel+Bortoleto" },
-  { id: "lawson", name: "Liam Lawson", constructor_id: "rb", price: 10.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LIALAW01_Liam_Lawson/lialaw01.png.transform/2col-retina/image.png" },
-  { id: "lindblad", name: "Arvid Lindblad", constructor_id: "rb", price: 9.0, image: "https://placehold.co/400x400?text=Arvid+Lindblad" },
+  { id: "verstappen", name: "Max Verstappen", constructor_id: "red_bull", price: 27.7, image: "https://media.formula1.com/content/dam/fom-website/drivers/M/MAXVER01_Max_Verstappen/maxver01.png.transform/2col-retina/image.png" },
+  { id: "hadjar", name: "Isack Hadjar", constructor_id: "red_bull", price: 15.1, image: "https://placehold.co/400x400?text=Isack+Hadjar" },
+  { id: "norris", name: "Lando Norris", constructor_id: "mclaren", price: 27.2, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LANNOR01_Lando_Norris/lannor01.png.transform/2col-retina/image.png" },
+  { id: "piastri", name: "Oscar Piastri", constructor_id: "mclaren", price: 25.5, image: "https://media.formula1.com/content/dam/fom-website/drivers/O/OSCPIA01_Oscar_Piastri/oscpia01.png.transform/2col-retina/image.png" },
+  { id: "leclerc", name: "Charles Leclerc", constructor_id: "ferrari", price: 22.8, image: "https://media.formula1.com/content/dam/fom-website/drivers/C/CHALEC01_Charles_Leclerc/chalec01.png.transform/2col-retina/image.png" },
+  { id: "hamilton", name: "Lewis Hamilton", constructor_id: "ferrari", price: 22.5, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LEWHAM01_Lewis_Hamilton/lewham01.png.transform/2col-retina/image.png" },
+  { id: "russell", name: "George Russell", constructor_id: "mercedes", price: 27.4, image: "https://media.formula1.com/content/dam/fom-website/drivers/G/GEORUS01_George_Russell/georus01.png.transform/2col-retina/image.png" },
+  { id: "antonelli", name: "Kimi Antonelli", constructor_id: "mercedes", price: 23.2, image: "https://media.formula1.com/content/dam/fom-website/drivers/K/KIMANT01_Kimi_Antonelli/kimant01.png.transform/2col-retina/image.png" },
+  { id: "sainz", name: "Carlos Sainz", constructor_id: "williams", price: 11.8, image: "https://media.formula1.com/content/dam/fom-website/drivers/C/CARSAI01_Carlos_Sainz/carsai01.png.transform/2col-retina/image.png" },
+  { id: "albon", name: "Alexander Albon", constructor_id: "williams", price: 11.6, image: "https://media.formula1.com/content/dam/fom-website/drivers/A/ALEALB01_Alexander_Albon/alealb01.png.transform/2col-retina/image.png" },
+  { id: "alonso", name: "Fernando Alonso", constructor_id: "aston_martin", price: 10.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/F/FERALO01_Fernando_Alonso/feralo01.png.transform/2col-retina/image.png" },
+  { id: "stroll", name: "Lance Stroll", constructor_id: "aston_martin", price: 8.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LANSTR01_Lance_Stroll/lanstr01.png.transform/2col-retina/image.png" },
+  { id: "gasly", name: "Pierre Gasly", constructor_id: "alpine", price: 12.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/P/PIEGAS01_Pierre_Gasly/piegas01.png.transform/2col-retina/image.png" },
+  { id: "colapinto", name: "Franco Colapinto", constructor_id: "alpine", price: 6.2, image: "https://placehold.co/400x400?text=Franco+Colapinto" },
+  { id: "ocon", name: "Esteban Ocon", constructor_id: "haas", price: 7.3, image: "https://media.formula1.com/content/dam/fom-website/drivers/E/ESTOCO01_Esteban_Ocon/estoco01.png.transform/2col-retina/image.png" },
+  { id: "bearman", name: "Oliver Bearman", constructor_id: "haas", price: 7.4, image: "https://media.formula1.com/content/dam/fom-website/drivers/O/OLIBEA01_Oliver_Bearman/olibea01.png.transform/2col-retina/image.png" },
+  { id: "perez", name: "Sergio Perez", constructor_id: "cadillac", price: 6.0, image: "https://media.formula1.com/content/dam/fom-website/drivers/S/SERPER01_Sergio_Perez/serper01.png.transform/2col-retina/image.png" },
+  { id: "bottas", name: "Valtteri Bottas", constructor_id: "cadillac", price: 5.9, image: "https://placehold.co/400x400?text=Valtteri+Bottas" },
+  { id: "hulkenberg", name: "Nico Hulkenberg", constructor_id: "audi", price: 6.8, image: "https://media.formula1.com/content/dam/fom-website/drivers/N/NICHUL01_Nico_Hulkenberg/nichul01.png.transform/2col-retina/image.png" },
+  { id: "bortoleto", name: "Gabriel Bortoleto", constructor_id: "audi", price: 6.4, image: "https://placehold.co/400x400?text=Gabriel+Bortoleto" },
+  { id: "lawson", name: "Liam Lawson", constructor_id: "rb", price: 6.5, image: "https://media.formula1.com/content/dam/fom-website/drivers/L/LIALAW01_Liam_Lawson/lialaw01.png.transform/2col-retina/image.png" },
+  { id: "lindblad", name: "Arvid Lindblad", constructor_id: "rb", price: 6.2, image: "https://placehold.co/400x400?text=Arvid+Lindblad" },
 ];
 
 const CONSTRUCTORS_DATA = [
-  { id: "mclaren", name: "McLaren", price: 28.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/mclaren.png.transform/2col-retina/image.png" },
-  { id: "ferrari", name: "Ferrari", price: 27.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/ferrari.png.transform/2col-retina/image.png" },
-  { id: "red_bull", name: "Red Bull Racing", price: 26.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/red-bull-racing.png.transform/2col-retina/image.png" },
-  { id: "mercedes", name: "Mercedes", price: 24.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/mercedes.png.transform/2col-retina/image.png" },
-  { id: "aston_martin", name: "Aston Martin", price: 18.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/aston-martin.png.transform/2col-retina/image.png" },
-  { id: "williams", name: "Williams", price: 15.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/williams.png.transform/2col-retina/image.png" },
-  { id: "alpine", name: "Alpine", price: 14.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/alpine.png.transform/2col-retina/image.png" },
-  { id: "haas", name: "Haas F1 Team", price: 12.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/haas-f1-team.png.transform/2col-retina/image.png" },
-  { id: "cadillac", name: "Cadillac", price: 11.0, image: "https://placehold.co/400x200?text=Cadillac" },
-  { id: "audi", name: "Audi", price: 10.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/kick-sauber.png.transform/2col-retina/image.png" },
-  { id: "rb", name: "Racing Bulls", price: 9.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/rb.png.transform/2col-retina/image.png" },
+  { id: "mclaren", name: "McLaren", price: 28.9, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/mclaren.png.transform/2col-retina/image.png" },
+  { id: "ferrari", name: "Ferrari", price: 23.3, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/ferrari.png.transform/2col-retina/image.png" },
+  { id: "red_bull", name: "Red Bull Racing", price: 28.2, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/red-bull-racing.png.transform/2col-retina/image.png" },
+  { id: "mercedes", name: "Mercedes", price: 29.3, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/mercedes.png.transform/2col-retina/image.png" },
+  { id: "aston_martin", name: "Aston Martin", price: 10.3, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/aston-martin.png.transform/2col-retina/image.png" },
+  { id: "williams", name: "Williams", price: 12.0, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/williams.png.transform/2col-retina/image.png" },
+  { id: "alpine", name: "Alpine", price: 12.5, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/alpine.png.transform/2col-retina/image.png" },
+  { id: "haas", name: "Haas F1 Team", price: 7.4, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/haas-f1-team.png.transform/2col-retina/image.png" },
+  { id: "cadillac", name: "Cadillac", price: 6.0, image: "https://placehold.co/400x200?text=Cadillac" },
+  { id: "audi", name: "Audi", price: 6.6, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/kick-sauber.png.transform/2col-retina/image.png" },
+  { id: "rb", name: "Racing Bulls", price: 6.3, image: "https://media.formula1.com/content/dam/fom-website/teams/2024/rb.png.transform/2col-retina/image.png" },
 ];
 
 async function start() {
@@ -326,10 +326,18 @@ async function start() {
         return res.status(400).json({ error: "Selected team is incomplete." });
       }
 
-      const rs = await db.execute({ sql: "SELECT id FROM leagues WHERE invite_code = ?", args: [inviteCode] });
+      const rs = await db.execute({ sql: "SELECT id, is_locked FROM leagues WHERE invite_code = ?", args: [inviteCode] });
       const league = rs.rows[0] as any;
       if (!league) return res.status(404).json({ error: "League not found" });
+      if (league.is_locked === 1) return res.status(403).json({ error: "This league is locked and cannot be joined." });
       
+      // Also check global lock
+      const lockRs = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
+      const globalLock = lockRs.rows[0] as any;
+      if (globalLock && globalLock.value === 'true') {
+        return res.status(403).json({ error: "All leagues are currently locked." });
+      }
+
       await db.execute({ sql: "INSERT INTO league_members (league_id, user_id, team_id) VALUES (?, ?, ?)", args: [league.id, userId, teamId] });
       res.json({ success: true, leagueId: league.id });
     } catch (e: any) {
@@ -398,7 +406,7 @@ async function start() {
       const lockRs = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
       const lockSetting = lockRs.rows[0] as any;
       if (lockSetting && lockSetting.value === 'true') {
-        return res.status(403).json({ error: "Teams are globally locked by admin" });
+        return res.status(403).json({ error: "Leagues are globally locked by admin" });
       }
 
       if (id) {
