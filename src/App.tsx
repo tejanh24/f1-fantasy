@@ -883,6 +883,10 @@ export default function App() {
   const logout = () => {
     localStorage.removeItem('f1_user');
     setUser(null);
+    setSelectedLeague(null);
+    setMyTeam(null);
+    setMyTeams([]);
+    setLeagues([]);
     setView('landing');
   };
 
