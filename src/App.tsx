@@ -177,13 +177,15 @@ function AdminPanel({
   onBack, 
   onSuccess,
   teamsLocked,
-  onToggleLock
+  onToggleLock,
+  onViewLeague
 }: { 
   drivers: Driver[], 
   onBack: () => void, 
   onSuccess: () => void,
   teamsLocked: boolean,
-  onToggleLock: () => void
+  onToggleLock: () => void,
+  onViewLeague: (league: League) => void
 }) {
   const [raceName, setRaceName] = useState('');
   const [poleDriverId, setPoleDriverId] = useState('');
@@ -353,7 +355,10 @@ function AdminPanel({
           <div className="grid gap-4">
             {leagues.map(l => (
               <div key={l.id} className="f1-card p-4 flex justify-between items-center">
-                <div>
+                <div 
+                  onClick={() => onViewLeague(l)}
+                  className="cursor-pointer hover:opacity-80 transition-opacity flex-1"
+                >
                   <div className="font-bold flex items-center gap-2">
                     {l.name}
                     {l.is_locked === 1 && (
@@ -365,6 +370,12 @@ function AdminPanel({
                   <div className="text-xs text-white/40 font-mono">CODE: {l.invite_code}</div>
                 </div>
                 <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => onViewLeague(l)}
+                    className="text-white/50 hover:text-white text-xs font-bold uppercase"
+                  >
+                    VIEW
+                  </button>
                   <button 
                     onClick={() => toggleAdminLeagueLock(l.id, l.is_locked)}
                     className={cn(
@@ -949,6 +960,7 @@ export default function App() {
                 }}
                 teamsLocked={teamsLocked}
                 onToggleLock={toggleLock}
+                onViewLeague={openLeague}
               />
             </motion.div>
           )}
