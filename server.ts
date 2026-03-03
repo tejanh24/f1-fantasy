@@ -374,7 +374,7 @@ async function start() {
     try {
       const rs = await db.execute({
         sql: `
-        SELECT u.name, t.points, 
+        SELECT u.id as user_id, u.name, t.points, 
                t.driver1_id, t.driver2_id, t.driver3_id, t.driver4_id, t.driver5_id, 
                t.constructor1_id, t.constructor2_id, t.turbo_driver_id, t.is_complete 
         FROM league_members lm

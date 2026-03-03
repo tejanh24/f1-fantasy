@@ -28,6 +28,7 @@ export interface League {
 }
 
 export interface Standing {
+  user_id: number;
   name: string;
   points: number;
   driver1_id: string;
