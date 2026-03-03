@@ -384,7 +384,7 @@ function AdminPanel({
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-f1-red" /> CREATE NEW LEAGUE
             </h3>
-            <form onSubmit={handleCreateLeague} className="flex gap-4">
+            <form onSubmit={handleCreateLeague} className="flex flex-col sm:flex-row gap-4">
               <input 
                 value={newLeagueName}
                 onChange={e => setNewLeagueName(e.target.value)}
@@ -395,7 +395,7 @@ function AdminPanel({
               <button 
                 type="submit" 
                 disabled={loading || !newLeagueName.trim()}
-                className="f1-button px-6"
+                className="f1-button px-6 w-full sm:w-auto"
               >
                 {loading ? 'CREATING...' : 'CREATE'}
               </button>
@@ -406,12 +406,12 @@ function AdminPanel({
             <h3 className="text-lg font-bold">ALL LEAGUES</h3>
           <div className="grid gap-4">
             {leagues.map(l => (
-              <div key={l.id} className="f1-card p-4 flex justify-between items-center">
+              <div key={l.id} className="f1-card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div 
                   onClick={() => onViewLeague(l)}
-                  className="cursor-pointer hover:opacity-80 transition-opacity flex-1"
+                  className="cursor-pointer hover:opacity-80 transition-opacity flex-1 w-full"
                 >
-                  <div className="font-bold flex items-center gap-2">
+                  <div className="font-bold flex items-center gap-2 text-lg">
                     {l.name}
                     {l.is_locked === 1 && (
                       <span className="bg-f1-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
@@ -421,17 +421,17 @@ function AdminPanel({
                   </div>
                   <div className="text-xs text-white/40 font-mono">CODE: {l.invite_code}</div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 w-full sm:w-auto justify-end border-t border-white/5 pt-4 sm:border-0 sm:pt-0">
                   <button 
                     onClick={() => onViewLeague(l)}
-                    className="text-white/50 hover:text-white text-xs font-bold uppercase"
+                    className="text-white/50 hover:text-white text-xs font-bold uppercase px-2 py-1"
                   >
                     VIEW
                   </button>
                   <button 
                     onClick={() => toggleAdminLeagueLock(l.id, l.is_locked)}
                     className={cn(
-                      "text-xs font-bold uppercase transition-colors",
+                      "text-xs font-bold uppercase transition-colors px-2 py-1",
                       l.is_locked ? "text-white/50 hover:text-white" : "text-emerald-500 hover:text-emerald-400"
                     )}
                   >
@@ -439,7 +439,7 @@ function AdminPanel({
                   </button>
                   <button 
                     onClick={() => deleteLeague(l.id)}
-                    className="text-f1-red hover:text-white text-xs font-bold uppercase"
+                    className="text-f1-red hover:text-white text-xs font-bold uppercase px-2 py-1"
                   >
                     DELETE
                   </button>
@@ -972,13 +972,13 @@ export default function App() {
           </div>
 
           {user && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
               {user.email === 'teluguf1tejarace@gmail.com' && user.name === 'teluguf1' && (
                 <button 
                   onClick={() => setView('admin')}
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors text-xs font-bold uppercase tracking-wider"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors text-xs font-bold uppercase tracking-wider"
                 >
-                  <Settings className="w-4 h-4 text-f1-red" /> Admin
+                  <Settings className="w-4 h-4 text-f1-red" /> <span className="hidden md:inline">Admin</span>
                 </button>
               )}
               <div className="hidden md:flex flex-col items-end">
@@ -1336,14 +1336,16 @@ export default function App() {
                   <h3 className="text-lg font-bold flex items-center gap-2">
                     <Trophy className="w-5 h-5 text-f1-red" /> STANDINGS
                   </h3>
-                  <div className="f1-card overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px] md:min-w-0">
+                  
+                  {/* Desktop Table */}
+                  <div className="hidden md:block f1-card overflow-hidden">
+                    <table className="w-full text-left">
                       <thead className="bg-white/5 text-xs font-mono text-white/40">
                         <tr>
-                          <th className="px-3 py-2 md:px-6 md:py-3">POS</th>
-                          <th className="px-3 py-2 md:px-6 md:py-3">PLAYER</th>
-                          <th className="px-3 py-2 md:px-6 md:py-3">TEAM</th>
-                          <th className="px-3 py-2 md:px-6 md:py-3 text-right">POINTS</th>
+                          <th className="px-6 py-3">POS</th>
+                          <th className="px-6 py-3">PLAYER</th>
+                          <th className="px-6 py-3">TEAM</th>
+                          <th className="px-6 py-3 text-right">POINTS</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -1356,20 +1358,20 @@ export default function App() {
                               s.name === user?.name && "bg-f1-red/10"
                             )}
                           >
-                            <td className="px-3 py-2 md:px-6 md:py-4 font-mono font-bold text-base md:text-lg">
+                            <td className="px-6 py-4 font-mono font-bold text-lg">
                               {idx + 1}
                             </td>
-                            <td className="px-3 py-2 md:px-6 md:py-4">
+                            <td className="px-6 py-4">
                               <div className="font-bold flex items-center gap-2">
-                                <span className="truncate max-w-[100px] md:max-w-none">{s.name}</span>
+                                <span>{s.name}</span>
                                 {s.is_complete === 0 && (
-                                  <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap">
+                                  <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
                                     Incomplete
                                   </span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2 md:px-6 md:py-4">
+                            <td className="px-6 py-4">
                               <div className="flex -space-x-2">
                                 {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].map(id => {
                                   const d = drivers.find(item => item.id === id);
@@ -1377,7 +1379,7 @@ export default function App() {
                                     <img 
                                       key={id}
                                       src={d.image} 
-                                      className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-f1-dark bg-f1-gray" 
+                                      className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray" 
                                       alt={d.name}
                                     />
                                   ) : null;
@@ -1388,27 +1390,68 @@ export default function App() {
                                     <img 
                                       key={id}
                                       src={c.image} 
-                                      className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-f1-dark bg-f1-gray object-contain p-1" 
+                                      className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray object-contain p-1" 
                                       alt={c.name}
                                     />
                                   ) : null;
                                 })}
                               </div>
                             </td>
-                            <td className="px-3 py-2 md:px-6 md:py-4 text-right font-mono font-bold text-f1-red">
+                            <td className="px-6 py-4 text-right font-mono font-bold text-f1-red">
                               {s.points}
                             </td>
                           </tr>
                         ))}
-                        {standings.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="px-6 py-12 text-center text-white/20">
-                              No teams drafted yet. Be the first!
-                            </td>
-                          </tr>
-                        )}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile Card List */}
+                  <div className="md:hidden space-y-3">
+                    {standings.map((s, idx) => (
+                      <div 
+                        key={idx}
+                        onClick={() => setViewingTeam(s)}
+                        className={cn(
+                          "f1-card p-4 flex items-center justify-between gap-4 active:scale-[0.98] transition-transform",
+                          s.name === user?.name && "border-f1-red bg-f1-red/5"
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className={cn(
+                            "font-mono font-bold text-xl w-8 text-center",
+                            idx === 0 ? "text-yellow-400" : idx === 1 ? "text-gray-400" : idx === 2 ? "text-amber-700" : "text-white/40"
+                          )}>
+                            {idx + 1}
+                          </span>
+                          <div>
+                            <div className="font-bold text-lg leading-tight">{s.name}</div>
+                            <div className="flex -space-x-1 mt-1">
+                              {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].slice(0, 3).map(id => {
+                                const d = drivers.find(item => item.id === id);
+                                return d ? (
+                                  <img key={id} src={d.image} className="w-5 h-5 rounded-full border border-f1-dark bg-f1-gray" alt="" />
+                                ) : null;
+                              })}
+                              {([s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].length > 3 || [s.constructor1_id, s.constructor2_id].length > 0) && (
+                                <div className="w-5 h-5 rounded-full border border-f1-dark bg-white/10 flex items-center justify-center text-[8px] font-bold">
+                                  +
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono font-bold text-xl text-f1-red">{s.points}</div>
+                          <div className="text-[10px] text-white/40 uppercase font-bold">PTS</div>
+                        </div>
+                      </div>
+                    ))}
+                    {standings.length === 0 && (
+                      <div className="text-center p-8 text-white/20 italic border border-dashed border-white/10 rounded-xl">
+                        No teams yet.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1498,17 +1541,17 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
                 onClick={() => setViewingTeam(null)}
               >
                 <motion.div 
                   initial={{ scale: 0.95, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.95, opacity: 0 }}
-                  className="f1-card w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                  className="f1-card w-full max-w-2xl bg-[#15151e] overflow-hidden flex flex-col max-h-[90vh]"
                   onClick={e => e.stopPropagation()}
                 >
-                  <div className="p-6 border-b border-white/10 flex justify-between items-center sticky top-0 bg-[#15151e] z-10">
+                  <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#15151e] shrink-0">
                     <div>
                       <h2 className="text-2xl italic">{viewingTeam.name}'s Team</h2>
                       <div className="text-f1-red font-mono font-bold text-xl">{viewingTeam.points} PTS</div>
@@ -1517,11 +1560,11 @@ export default function App() {
                       onClick={() => setViewingTeam(null)}
                       className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     >
-                      <LogOut className="w-5 h-5" />
+                      <X className="w-6 h-6" />
                     </button>
                   </div>
                   
-                  <div className="p-6 space-y-8">
+                  <div className="p-6 space-y-8 overflow-y-auto">
                     {/* Drivers */}
                     <div>
                       <h3 className="text-sm font-bold uppercase tracking-widest text-white/40 mb-4 flex items-center gap-2">
@@ -1585,7 +1628,7 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="space-y-8 py-8"
             >
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-8 sticky top-16 z-40 bg-[#0B0C10]/95 backdrop-blur py-4 border-b border-white/10 -mx-4 px-4 md:mx-0 md:px-0 md:static md:bg-transparent md:border-none md:py-0">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-8 sticky top-16 z-40 bg-[#0B0C10] shadow-xl py-4 border-b border-white/10 -mx-4 px-4 md:mx-0 md:px-0 md:static md:bg-transparent md:border-none md:py-0 md:shadow-none">
                 <div className="w-full md:w-auto flex justify-between md:justify-start items-center">
                   <button 
                     onClick={() => selectedLeague ? setView('league') : setView('dashboard')}
@@ -1593,8 +1636,10 @@ export default function App() {
                   >
                     ← BACK
                   </button>
-                  <div className="md:hidden text-xs font-mono text-white/40">
-                    {draftDrivers.length}/5 DRV • {draftConstructors.length}/2 CNS
+                  <div className="md:hidden text-xs font-mono text-white/40 font-bold">
+                    <span className={draftDrivers.length === 5 ? "text-emerald-400" : ""}>{draftDrivers.length}/5 DRV</span>
+                    <span className="mx-2">•</span>
+                    <span className={draftConstructors.length === 2 ? "text-emerald-400" : ""}>{draftConstructors.length}/2 CNS</span>
                   </div>
                 </div>
 
@@ -1633,10 +1678,10 @@ export default function App() {
                 <div className="lg:col-span-2 space-y-12">
                   {/* Drivers */}
                   <section>
-                    <h3 className="text-2xl italic mb-6 flex items-center gap-3">
-                      <UserIcon className="w-6 h-6 text-f1-red" /> SELECT 5 DRIVERS
+                    <h3 className="text-xl md:text-2xl italic mb-4 md:mb-6 flex items-center gap-3">
+                      <UserIcon className="w-5 h-5 md:w-6 md:h-6 text-f1-red" /> SELECT 5 DRIVERS
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                       {drivers.map(driver => {
                         const isSelected = draftDrivers.includes(driver.id);
                         const canSelect = isSelected || (draftDrivers.length < 5 && currentSpend() + driver.price <= BUDGET_LIMIT);
@@ -1647,18 +1692,18 @@ export default function App() {
                             onClick={() => toggleDriver(driver.id)}
                             disabled={!canSelect && !isSelected}
                             className={cn(
-                              "f1-card p-4 flex items-center gap-4 text-left relative group",
+                              "f1-card p-3 md:p-4 flex items-center gap-3 md:gap-4 text-left relative group transition-all active:scale-[0.98]",
                               isSelected && "border-f1-red bg-f1-red/10",
                               !canSelect && !isSelected && "opacity-40 grayscale"
                             )}
                           >
-                            <img src={driver.image} className="w-16 h-16 rounded-full bg-f1-gray" alt={driver.name} />
-                            <div className="flex-1">
-                              <div className="text-xs text-white/40 font-mono uppercase">
+                            <img src={driver.image} className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-f1-gray" alt={driver.name} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] md:text-xs text-white/40 font-mono uppercase truncate">
                                 {constructors.find(c => c.id === driver.constructor_id)?.name}
                               </div>
-                              <div className="font-bold text-lg">{driver.name}</div>
-                              <div className="text-f1-red font-mono font-bold">${driver.price}M</div>
+                              <div className="font-bold text-base md:text-lg truncate">{driver.name}</div>
+                              <div className="text-f1-red font-mono font-bold text-sm md:text-base">${driver.price}M</div>
                             </div>
                             {isSelected && (
                               <div className="absolute top-2 right-2 bg-f1-red p-1 rounded-full">
@@ -1674,10 +1719,10 @@ export default function App() {
                   {/* Turbo Driver Selection */}
                   {draftDrivers.length === 5 && (
                     <section>
-                      <h3 className="text-2xl italic mb-6 flex items-center gap-3">
-                        <Zap className="w-6 h-6 text-f1-red fill-current" /> SELECT TURBO DRIVER (2x POINTS)
+                      <h3 className="text-xl md:text-2xl italic mb-4 md:mb-6 flex items-center gap-3">
+                        <Zap className="w-5 h-5 md:w-6 md:h-6 text-f1-red fill-current" /> SELECT TURBO DRIVER (2x)
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                         {draftDrivers.map(id => {
                           const driver = drivers.find(d => d.id === id);
                           if (!driver) return null;
@@ -1688,15 +1733,15 @@ export default function App() {
                               key={id}
                               onClick={() => setDraftTurboDriverId(id)}
                               className={cn(
-                                "f1-card p-4 flex items-center gap-4 text-left relative transition-all",
+                                "f1-card p-3 md:p-4 flex items-center gap-3 md:gap-4 text-left relative transition-all active:scale-[0.98]",
                                 isTurbo ? "border-f1-red bg-f1-red/10 ring-2 ring-f1-red" : "hover:bg-white/5"
                               )}
                             >
-                              <img src={driver.image} className="w-12 h-12 rounded-full bg-f1-gray" alt={driver.name} />
-                              <div className="flex-1">
-                                <div className="font-bold">{driver.name}</div>
-                                <div className="text-xs text-white/50">
-                                  {isTurbo ? "2x POINTS ACTIVE" : "Select for 2x Points"}
+                              <img src={driver.image} className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-f1-gray" alt={driver.name} />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-bold text-sm md:text-base truncate">{driver.name}</div>
+                                <div className="text-[10px] md:text-xs text-white/50 truncate">
+                                  {isTurbo ? "2x ACTIVE" : "Select for 2x"}
                                 </div>
                               </div>
                               {isTurbo && (
@@ -1713,10 +1758,10 @@ export default function App() {
 
                   {/* Constructors */}
                   <section>
-                    <h3 className="text-2xl italic mb-6 flex items-center gap-3">
-                      <Car className="w-6 h-6 text-f1-red" /> SELECT 2 CONSTRUCTORS
+                    <h3 className="text-xl md:text-2xl italic mb-4 md:mb-6 flex items-center gap-3">
+                      <Car className="w-5 h-5 md:w-6 md:h-6 text-f1-red" /> SELECT 2 CONSTRUCTORS
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                       {constructors.map(c => {
                         const isSelected = draftConstructors.includes(c.id);
                         const canSelect = isSelected || (draftConstructors.length < 2 && currentSpend() + c.price <= BUDGET_LIMIT);
@@ -1727,15 +1772,15 @@ export default function App() {
                             onClick={() => toggleConstructor(c.id)}
                             disabled={!canSelect && !isSelected}
                             className={cn(
-                              "f1-card p-4 flex items-center gap-4 text-left relative group",
+                              "f1-card p-3 md:p-4 flex items-center gap-3 md:gap-4 text-left relative group transition-all active:scale-[0.98]",
                               isSelected && "border-f1-red bg-f1-red/10",
                               !canSelect && !isSelected && "opacity-40 grayscale"
                             )}
                           >
-                            <img src={c.image} className="w-20 h-12 object-contain bg-f1-gray rounded-lg p-2" alt={c.name} />
-                            <div className="flex-1">
-                              <div className="font-bold text-lg">{c.name}</div>
-                              <div className="text-f1-red font-mono font-bold">${c.price}M</div>
+                            <img src={c.image} className="w-16 h-10 md:w-20 md:h-12 object-contain bg-f1-gray rounded-lg p-1 md:p-2" alt={c.name} />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-base md:text-lg truncate">{c.name}</div>
+                              <div className="text-f1-red font-mono font-bold text-sm md:text-base">${c.price}M</div>
                             </div>
                             {isSelected && (
                               <div className="absolute top-2 right-2 bg-f1-red p-1 rounded-full">
