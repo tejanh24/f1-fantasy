@@ -178,14 +178,16 @@ function AdminPanel({
   onSuccess,
   teamsLocked,
   onToggleLock,
-  onViewLeague
+  onViewLeague,
+  user
 }: { 
   drivers: Driver[], 
   onBack: () => void, 
   onSuccess: () => void,
   teamsLocked: boolean,
   onToggleLock: () => void,
-  onViewLeague: (league: League) => void
+  onViewLeague: (league: League) => void,
+  user: User | null
 }) {
   const [raceName, setRaceName] = useState('');
   const [poleDriverId, setPoleDriverId] = useState('');
@@ -198,6 +200,9 @@ function AdminPanel({
   const [view, setView] = useState<'race' | 'leagues' | 'history'>('race');
   const [races, setRaces] = useState<any[]>([]);
   const [editingRaceId, setEditingRaceId] = useState<number | null>(null);
+
+  // League creation state
+  const [newLeagueName, setNewLeagueName] = useState('');
 
   useEffect(() => {
     fetchLeagues();
@@ -230,6 +235,30 @@ function AdminPanel({
       if (data) setLeagues(data);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleCreateLeague = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newLeagueName.trim()) return;
+    
+    setLoading(true);
+    try {
+      // Create league without joining (teamId is undefined)
+      const data = await safeFetch('/api/leagues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newLeagueName, adminId: user.id })
+      });
+      
+      if (data) {
+        setNewLeagueName('');
+        fetchLeagues();
+      }
+    } catch (err: any) {
+      setError("Failed to create league. " + (err.message || ""));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -350,8 +379,31 @@ function AdminPanel({
       <h2 className="text-2xl font-black italic">ADMIN DASHBOARD</h2>
 
       {view === 'leagues' ? (
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold">ALL LEAGUES</h3>
+        <div className="space-y-8">
+          <div className="f1-card p-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-f1-red" /> CREATE NEW LEAGUE
+            </h3>
+            <form onSubmit={handleCreateLeague} className="flex gap-4">
+              <input 
+                value={newLeagueName}
+                onChange={e => setNewLeagueName(e.target.value)}
+                className="f1-input flex-1" 
+                placeholder="League Name" 
+                required
+              />
+              <button 
+                type="submit" 
+                disabled={loading || !newLeagueName.trim()}
+                className="f1-button px-6"
+              >
+                {loading ? 'CREATING...' : 'CREATE'}
+              </button>
+            </form>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold">ALL LEAGUES</h3>
           <div className="grid gap-4">
             {leagues.map(l => (
               <div key={l.id} className="f1-card p-4 flex justify-between items-center">
@@ -396,6 +448,7 @@ function AdminPanel({
             ))}
             {leagues.length === 0 && <div className="text-white/40 italic">No leagues found.</div>}
           </div>
+        </div>
         </div>
       ) : view === 'history' ? (
         <RaceResults races={races} onEdit={handleEditRace} />
@@ -981,6 +1034,7 @@ export default function App() {
                 teamsLocked={teamsLocked}
                 onToggleLock={toggleLock}
                 onViewLeague={openLeague}
+                user={user}
               />
             </motion.div>
           )}
@@ -1128,22 +1182,6 @@ export default function App() {
                   {/* Create/Join Card */}
                   <div className="f1-card p-4 md:p-6 flex flex-col gap-6">
                     <div>
-                      <h3 className="text-lg mb-4 flex items-center gap-2">
-                        <Plus className="w-5 h-5 text-f1-red" /> CREATE LEAGUE
-                      </h3>
-                      <form onSubmit={handleCreateLeague} className="space-y-3">
-                        <input name="leagueName" autoComplete="off" required className="f1-input w-full text-sm" placeholder="League Name" />
-                        <select name="teamId" required className="f1-input w-full text-sm">
-                          <option value="">Select a Team...</option>
-                          {myTeams.map(t => {
-                            const isComplete = t.is_complete === 1;
-                            return <option key={t.id} value={t.id} disabled={!isComplete}>{t.name} {!isComplete ? '(Incomplete)' : ''}</option>;
-                          })}
-                        </select>
-                        <button className="f1-button w-full text-sm py-2">CREATE</button>
-                      </form>
-                    </div>
-                    <div className="border-t border-white/10 pt-6">
                       <h3 className="text-lg mb-4 flex items-center gap-2">
                         <Users className="w-5 h-5 text-f1-red" /> JOIN LEAGUE
                       </h3>

@@ -297,20 +297,26 @@ async function start() {
 
   app.post("/api/leagues", async (req, res) => {
     const { name, adminId, teamId } = req.body;
-    if (!teamId) return res.status(400).json({ error: "A complete team is required to create a league." });
-
+    
     try {
-      // Check if team is complete
-      const teamRs = await db.execute({ sql: "SELECT * FROM teams WHERE id = ? AND user_id = ?", args: [teamId, adminId] });
-      const team = teamRs.rows[0] as any;
-      if (!team || !team.driver1_id || !team.driver2_id || !team.driver3_id || !team.driver4_id || !team.driver5_id || !team.constructor1_id || !team.constructor2_id) {
-        return res.status(400).json({ error: "Selected team is incomplete." });
+      // If teamId is provided, validate it
+      if (teamId) {
+        const teamRs = await db.execute({ sql: "SELECT * FROM teams WHERE id = ? AND user_id = ?", args: [teamId, adminId] });
+        const team = teamRs.rows[0] as any;
+        if (!team || !team.driver1_id || !team.driver2_id || !team.driver3_id || !team.driver4_id || !team.driver5_id || !team.constructor1_id || !team.constructor2_id) {
+          return res.status(400).json({ error: "Selected team is incomplete." });
+        }
       }
 
       const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       const result = await db.execute({ sql: "INSERT INTO leagues (name, invite_code, admin_id) VALUES (?, ?, ?)", args: [name, inviteCode, adminId] });
       const leagueId = Number(result.lastInsertRowid);
-      await db.execute({ sql: "INSERT INTO league_members (league_id, user_id, team_id) VALUES (?, ?, ?)", args: [leagueId, adminId, teamId] });
+      
+      // Only add to league_members if a team was provided
+      if (teamId) {
+        await db.execute({ sql: "INSERT INTO league_members (league_id, user_id, team_id) VALUES (?, ?, ?)", args: [leagueId, adminId, teamId] });
+      }
+      
       res.json({ id: leagueId, inviteCode });
     } catch (e) {
       console.error(e);
