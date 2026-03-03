@@ -112,7 +112,9 @@ async function start() {
         driver5_id TEXT, 
         constructor1_id TEXT, 
         constructor2_id TEXT, 
-        points INTEGER DEFAULT 0
+        turbo_driver_id TEXT,
+        points INTEGER DEFAULT 0,
+        is_complete INTEGER DEFAULT 0
       );
       
       CREATE TABLE IF NOT EXISTS race_results (id INTEGER PRIMARY KEY AUTOINCREMENT, race_name TEXT, results_json TEXT, processed_at DATETIME DEFAULT CURRENT_TIMESTAMP);
@@ -137,6 +139,8 @@ async function start() {
     
     // Migrations for existing databases
     try { await db.execute("ALTER TABLE teams ADD COLUMN name TEXT DEFAULT 'My Team'"); } catch (e) {}
+    try { await db.execute("ALTER TABLE teams ADD COLUMN turbo_driver_id TEXT"); } catch (e) {}
+    try { await db.execute("ALTER TABLE teams ADD COLUMN is_complete INTEGER DEFAULT 0"); } catch (e) {}
     try { 
       await db.execute("ALTER TABLE league_members ADD COLUMN team_id INTEGER"); 
       await db.execute("UPDATE league_members SET team_id = (SELECT id FROM teams WHERE teams.user_id = league_members.user_id AND teams.league_id = league_members.league_id LIMIT 1) WHERE team_id IS NULL");
@@ -370,9 +374,9 @@ async function start() {
     try {
       const rs = await db.execute({
         sql: `
-        SELECT u.name, t.points, 
+        SELECT u.id as user_id, u.name, t.points, 
                t.driver1_id, t.driver2_id, t.driver3_id, t.driver4_id, t.driver5_id, 
-               t.constructor1_id, t.constructor2_id 
+               t.constructor1_id, t.constructor2_id, t.turbo_driver_id, t.is_complete 
         FROM league_members lm
         JOIN teams t ON lm.team_id = t.id 
         JOIN users u ON lm.user_id = u.id 
@@ -399,8 +403,11 @@ async function start() {
   });
 
   app.post("/api/teams", async (req, res) => {
-    const { id, userId, name, driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id } = req.body;
+    const { id, userId, name, driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, turboDriverId } = req.body;
     
+    // Calculate completeness
+    const isComplete = driver1Id && driver2Id && driver3Id && driver4Id && driver5Id && constructor1Id && constructor2Id && turboDriverId ? 1 : 0;
+
     try {
       // Check global lock status
       const lockRs = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
@@ -421,8 +428,8 @@ async function start() {
 
         // Update existing team
         await db.execute({ 
-          sql: "UPDATE teams SET name = ?, driver1_id = ?, driver2_id = ?, driver3_id = ?, driver4_id = ?, driver5_id = ?, constructor1_id = ?, constructor2_id = ? WHERE id = ? AND user_id = ?", 
-          args: [name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, id, userId] 
+          sql: "UPDATE teams SET name = ?, driver1_id = ?, driver2_id = ?, driver3_id = ?, driver4_id = ?, driver5_id = ?, constructor1_id = ?, constructor2_id = ?, turbo_driver_id = ?, is_complete = ? WHERE id = ? AND user_id = ?", 
+          args: [name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, turboDriverId, isComplete, id, userId] 
         });
         res.json({ success: true, id });
       } else {
@@ -434,8 +441,8 @@ async function start() {
         
         // Insert new team
         const rs = await db.execute({ 
-          sql: "INSERT INTO teams (user_id, name, driver1_id, driver2_id, driver3_id, driver4_id, driver5_id, constructor1_id, constructor2_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-          args: [userId, name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id] 
+          sql: "INSERT INTO teams (user_id, name, driver1_id, driver2_id, driver3_id, driver4_id, driver5_id, constructor1_id, constructor2_id, turbo_driver_id, is_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+          args: [userId, name || 'My Team', driver1Id, driver2Id, driver3Id, driver4Id, driver5Id, constructor1Id, constructor2Id, turboDriverId, isComplete] 
         });
         res.json({ success: true, id: Number(rs.lastInsertRowid) });
       }
@@ -551,6 +558,11 @@ async function start() {
                   (driverPoints[team.driver5_id] || 0) + 
                   (constructorPoints[team.constructor1_id] || 0) + 
                   (constructorPoints[team.constructor2_id] || 0);
+          
+          // Add Turbo Driver Bonus
+          if (team.turbo_driver_id && driverPoints[team.turbo_driver_id]) {
+            p += driverPoints[team.turbo_driver_id]; // Double the points
+          }
           
           await tx.execute({ 
             sql: "INSERT INTO team_race_points (team_id, race_id, points) VALUES (?, ?, ?)", 
