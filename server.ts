@@ -135,6 +135,28 @@ async function start() {
         FOREIGN KEY(team_id) REFERENCES teams(id),
         FOREIGN KEY(race_id) REFERENCES race_results(id)
       );
+
+      CREATE TABLE IF NOT EXISTS predictions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        race_name TEXT,
+        pole_driver_id TEXT,
+        p1_driver_id TEXT,
+        p2_driver_id TEXT,
+        p3_driver_id TEXT,
+        fastest_lap_driver_id TEXT,
+        points INTEGER DEFAULT 0,
+        processed INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, race_name)
+      );
+
+      CREATE TABLE IF NOT EXISTS races (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        date TEXT,
+        round INTEGER
+      );
     `);
     
     // Migrations for existing databases
@@ -146,6 +168,90 @@ async function start() {
       await db.execute("UPDATE league_members SET team_id = (SELECT id FROM teams WHERE teams.user_id = league_members.user_id AND teams.league_id = league_members.league_id LIMIT 1) WHERE team_id IS NULL");
     } catch (e) {}
     try { await db.execute("ALTER TABLE leagues ADD COLUMN is_locked INTEGER DEFAULT 0"); } catch (e) {}
+    try { await db.execute("ALTER TABLE predictions ADD COLUMN race_id INTEGER"); } catch (e) {}
+
+    // Aggressive cleanup for race names and IDs
+    try {
+      // Trim all names
+      await db.execute("UPDATE races SET name = TRIM(name)");
+      await db.execute("UPDATE predictions SET race_name = TRIM(race_name)");
+      
+      // Backfill race_id with flexible matching
+      await db.execute(`
+        UPDATE predictions 
+        SET race_id = (
+          SELECT id FROM races 
+          WHERE TRIM(races.name) = TRIM(predictions.race_name) 
+             OR LOWER(TRIM(races.name)) = LOWER(TRIM(predictions.race_name))
+          LIMIT 1
+        )
+        WHERE race_id IS NULL
+      `);
+      
+      // Also backfill race_name if it's missing but race_id exists
+      await db.execute(`
+        UPDATE predictions
+        SET race_name = (SELECT name FROM races WHERE id = predictions.race_id)
+        WHERE (race_name IS NULL OR race_name = '') AND race_id IS NOT NULL
+      `);
+    } catch (e) {
+      console.error("Migration error:", e);
+    }
+
+    // Populate Races
+    const RACES_2026 = [
+      { name: "Australian Grand Prix", date: "2026-03-08", round: 1 },
+      { name: "Chinese Grand Prix", date: "2026-03-15", round: 2 },
+      { name: "Japanese Grand Prix", date: "2026-03-29", round: 3 },
+      { name: "Bahrain Grand Prix", date: "2026-04-12", round: 4 },
+      { name: "Saudi Arabian Grand Prix", date: "2026-04-19", round: 5 },
+      { name: "Miami Grand Prix", date: "2026-05-03", round: 6 },
+      { name: "Canadian Grand Prix", date: "2026-05-24", round: 7 },
+      { name: "Monaco Grand Prix", date: "2026-06-07", round: 8 },
+      { name: "Spanish Grand Prix", date: "2026-06-14", round: 9 },
+      { name: "Austrian Grand Prix", date: "2026-06-28", round: 10 },
+      { name: "British Grand Prix", date: "2026-07-05", round: 11 },
+      { name: "Belgian Grand Prix", date: "2026-07-19", round: 12 },
+      { name: "Hungarian Grand Prix", date: "2026-07-26", round: 13 },
+      { name: "Dutch Grand Prix", date: "2026-08-23", round: 14 },
+      { name: "Italian Grand Prix", date: "2026-09-06", round: 15 },
+      { name: "Madrid Grand Prix", date: "2026-09-13", round: 16 },
+      { name: "Azerbaijan Grand Prix", date: "2026-09-27", round: 17 },
+      { name: "Singapore Grand Prix", date: "2026-10-11", round: 18 },
+      { name: "United States Grand Prix", date: "2026-10-25", round: 19 },
+      { name: "Mexico City Grand Prix", date: "2026-11-01", round: 20 },
+      { name: "Sao Paulo Grand Prix", date: "2026-11-08", round: 21 },
+      { name: "Las Vegas Grand Prix", date: "2026-11-21", round: 22 },
+      { name: "Qatar Grand Prix", date: "2026-11-29", round: 23 },
+      { name: "Abu Dhabi Grand Prix", date: "2026-12-06", round: 24 }
+    ];
+
+    for (const r of RACES_2026) {
+      await db.execute({
+        sql: "INSERT OR IGNORE INTO races (name, date, round) VALUES (?, ?, ?)",
+        args: [r.name.trim(), r.date, r.round]
+      });
+    }
+
+    // Data cleanup: ensure all race names are trimmed
+    await db.execute("UPDATE races SET name = TRIM(name)");
+    await db.execute("UPDATE predictions SET race_name = TRIM(race_name)");
+
+    console.log("[SERVER] Populating Races table...");
+    for (const race of RACES_2026) {
+      await db.execute({
+        sql: "INSERT INTO races (name, date, round) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET date=excluded.date, round=excluded.round",
+        args: [race.name, race.date, race.round]
+      });
+    }
+
+    // Backfill race_id in predictions
+    console.log("[SERVER] Backfilling race_id in predictions...");
+    await db.execute(`
+      UPDATE predictions 
+      SET race_id = (SELECT id FROM races WHERE TRIM(races.name) = TRIM(predictions.race_name) OR LOWER(races.name) = LOWER(predictions.race_name) LIMIT 1)
+      WHERE race_id IS NULL
+    `);
     
     // Initialize settings if not exists
     const lockSetting = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: ['teams_locked'] });
@@ -184,6 +290,16 @@ async function start() {
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.get("/api/races", async (req, res) => {
+    try {
+      const rs = await db.execute("SELECT * FROM races ORDER BY round ASC");
+      res.json(rs.rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to fetch races" });
     }
   });
 
@@ -497,42 +613,236 @@ async function start() {
     }
   });
 
-  app.get("/api/races", async (req, res) => {
+  app.get("/api/predictions/user/:userId/id/:raceId", async (req, res) => {
+    try {
+	console.log("Predict");
+      const rs = await db.execute({
+        sql: "SELECT * FROM predictions WHERE user_id = ? AND race_id = ?",
+        args: [req.params.userId, req.params.raceId]
+      });
+      res.json(rs.rows[0] || null);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to fetch prediction" });
+    }
+  });
+
+  app.get("/api/predictions/user/:userId/:raceName", async (req, res) => {
+    try {
+      const rs = await db.execute({
+        sql: "SELECT * FROM predictions WHERE user_id = ? AND race_name = ?",
+        args: [req.params.userId, req.params.raceName]
+      });
+      res.json(rs.rows[0] || null);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to fetch prediction" });
+    }
+  });
+
+  app.post("/api/predictions", async (req, res) => {
+    const { userId, raceName, raceId: bodyRaceId, poleDriverId, p1DriverId, p2DriverId, p3DriverId, fastestLapDriverId } = req.body;
+    try {
+      // Look up race_id if not provided or to verify
+      let raceId = bodyRaceId;
+      if (!raceId) {
+        const raceRs = await db.execute({ 
+          sql: "SELECT id FROM races WHERE TRIM(name) = ? OR LOWER(name) = LOWER(?) OR name = ?", 
+          args: [raceName.trim(), raceName.trim(), raceName] 
+        });
+        raceId = raceRs.rows[0]?.id || null;
+      }
+
+      await db.execute({
+        sql: `INSERT INTO predictions (user_id, race_name, race_id, pole_driver_id, p1_driver_id, p2_driver_id, p3_driver_id, fastest_lap_driver_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(user_id, race_name) DO UPDATE SET
+              race_id = excluded.race_id,
+              pole_driver_id = excluded.pole_driver_id,
+              p1_driver_id = excluded.p1_driver_id,
+              p2_driver_id = excluded.p2_driver_id,
+              p3_driver_id = excluded.p3_driver_id,
+              fastest_lap_driver_id = excluded.fastest_lap_driver_id`,
+        args: [userId, raceName.trim(), raceId, poleDriverId, p1DriverId, p2DriverId, p3DriverId, fastestLapDriverId]
+      });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to save prediction" });
+    }
+  });
+
+  app.get("/api/predictions/leaderboard/id/:raceId", async (req, res) => {
+    try {
+console.log("leaddddddd");
+      const raceId = Number(req.params.raceId);
+      console.log(`[SERVER] API HIT: /api/predictions/leaderboard/id/${raceId}`);
+      
+      const rs = await db.execute({
+        sql: `
+          SELECT 
+            p.user_id,
+            u.name, 
+            COALESCE(p.points, 0) as points,
+            p.pole_driver_id,
+            p.p1_driver_id,
+            p.p2_driver_id,
+            p.p3_driver_id,
+            p.fastest_lap_driver_id,
+            p.processed,
+            p.race_name,
+            p.race_id
+          FROM predictions p
+          LEFT JOIN users u ON p.user_id = u.id
+          WHERE p.race_id = ? 
+             OR p.race_name = (SELECT name FROM races WHERE id = ?)
+             OR TRIM(p.race_name) = (SELECT TRIM(name) FROM races WHERE id = ?)
+          ORDER BY COALESCE(p.points, 0) DESC, u.name ASC
+        `,
+        args: [raceId, raceId, raceId]
+      });
+
+      if (rs.rows.length === 0) {
+        // Provide debug info even for ID route if empty
+        const raceInfo = await db.execute({ sql: "SELECT name FROM races WHERE id = ?", args: [raceId] });
+        const allPredictions = await db.execute("SELECT DISTINCT race_name, race_id FROM predictions LIMIT 5");
+        return res.json({
+          _debug: {
+            queriedRaceId: raceId,
+            raceNameInDb: raceInfo.rows[0]?.name || 'Unknown',
+            availablePredictions: allPredictions.rows
+          },
+          leaderboard: []
+        });
+      }
+
+      res.json(rs.rows);
+    } catch (e) {
+      console.error("[SERVER] Leaderboard ID error:", e);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/predictions/leaderboard/:raceName", async (req, res) => {
+    try {
+      const raceName = req.params.raceName;
+      console.log(`[DEBUG] Fetching leaderboard for race: '${raceName}'`);
+      
+      // Look up race_id first for better matching
+      const raceRs = await db.execute({ 
+        sql: "SELECT id FROM races WHERE TRIM(name) = ? OR LOWER(name) = LOWER(?) OR name = ?", 
+        args: [raceName.trim(), raceName.trim(), raceName] 
+      });
+      const raceId = raceRs.rows[0]?.id || null;
+      console.log(`[DEBUG] Found raceId: ${raceId} for name: '${raceName}'`);
+
+      // Query with multiple matching strategies
+      let rs = await db.execute({
+        sql: `
+          SELECT 
+            p.user_id,
+            u.name, 
+            COALESCE(p.points, 0) as points,
+            p.pole_driver_id,
+            p.p1_driver_id,
+            p.p2_driver_id,
+            p.p3_driver_id,
+            p.fastest_lap_driver_id,
+            p.processed,
+            p.race_name,
+            p.race_id
+          FROM predictions p
+          LEFT JOIN users u ON p.user_id = u.id
+          WHERE p.race_name = ? 
+             OR (p.race_id IS NOT NULL AND p.race_id = ?)
+             OR TRIM(p.race_name) = ?
+             OR LOWER(p.race_name) = LOWER(?)
+          ORDER BY COALESCE(p.points, 0) DESC, u.name ASC
+        `,
+        args: [raceName, raceId, raceName.trim(), raceName.trim()]
+      });
+
+      console.log(`[DEBUG] Leaderboard found ${rs.rows.length} rows`);
+
+      // If empty, return some debug info in the response
+      if (rs.rows.length === 0) {
+        const allPredictions = await db.execute("SELECT DISTINCT race_name, race_id FROM predictions LIMIT 10");
+        return res.json({
+          _debug: {
+            queriedRaceName: raceName,
+            foundRaceId: raceId,
+            availablePredictions: allPredictions.rows
+          },
+          leaderboard: []
+        });
+      }
+
+      res.json(rs.rows);
+    } catch (e) {
+      console.error("[DEBUG] Error fetching leaderboard:", e);
+      res.status(500).json({ error: "Failed to fetch race leaderboard" });
+    }
+  });
+
+  app.get("/api/predictions/global-leaderboard", async (req, res) => {
+    try {
+      const rs = await db.execute(`
+        SELECT u.name, SUM(p.points) as total_points
+        FROM predictions p
+        JOIN users u ON p.user_id = u.id
+        GROUP BY p.user_id
+        ORDER BY total_points DESC
+      `);
+      res.json(rs.rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/race-results", async (req, res) => {
     try {
       const rs = await db.execute("SELECT * FROM race_results ORDER BY processed_at DESC");
       res.json(rs.rows);
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: "Failed to fetch races" });
+      res.status(500).json({ error: "Failed to fetch race results" });
     }
   });
 
   app.post("/api/admin/process-race", async (req, res) => {
-    const { raceName, poleDriverId, fastestLapDriverId, finishers, dnfs, raceId } = req.body;
+    const { raceName, poleDriverId, fastestLapDriverId, finishers, dnfs, raceId: bodyRaceId } = req.body;
     
     if (!db) return res.status(500).json({ error: "Database not available" });
 
     try {
       const tx = await db.transaction("write");
       try {
-        let currentRaceId = raceId;
+        let currentRaceResultId = bodyRaceId;
 
         // 1. Insert or Update Race Result
         const resultsJson = JSON.stringify({ poleDriverId, fastestLapDriverId, finishers, dnfs });
-        if (currentRaceId) {
+        if (currentRaceResultId) {
           await tx.execute({ 
             sql: "UPDATE race_results SET race_name = ?, results_json = ? WHERE id = ?", 
-            args: [raceName, resultsJson, currentRaceId] 
+            args: [raceName, resultsJson, currentRaceResultId] 
           });
           // Clear old points for this race
-          await tx.execute({ sql: "DELETE FROM team_race_points WHERE race_id = ?", args: [currentRaceId] });
+          await tx.execute({ sql: "DELETE FROM team_race_points WHERE race_id = ?", args: [currentRaceResultId] });
         } else {
           const result = await tx.execute({ 
             sql: "INSERT INTO race_results (race_name, results_json) VALUES (?, ?)", 
             args: [raceName, resultsJson] 
           });
-          currentRaceId = Number(result.lastInsertRowid);
+          currentRaceResultId = Number(result.lastInsertRowid);
         }
+
+        // Find the race ID from the schedule (races table)
+        const raceRs = await tx.execute({
+          sql: "SELECT id FROM races WHERE TRIM(name) = TRIM(?) OR LOWER(name) = LOWER(TRIM(?)) LIMIT 1",
+          args: [raceName, raceName]
+        });
+        const scheduleRaceId = raceRs.rows[0]?.id || null;
 
         // 2. Calculate Points
         const driverPoints: Record<string, number> = {};
@@ -572,7 +882,7 @@ async function start() {
           
           await tx.execute({ 
             sql: "INSERT INTO team_race_points (team_id, race_id, points) VALUES (?, ?, ?)", 
-            args: [team.id, currentRaceId, p] 
+            args: [team.id, currentRaceResultId, p] 
           });
         }
 
@@ -585,6 +895,44 @@ async function start() {
             WHERE team_race_points.team_id = teams.id
           )
         `);
+
+        // 5. Calculate Prediction Points
+        const predictionsRs = await tx.execute({
+          sql: `SELECT * FROM predictions 
+                WHERE TRIM(race_name) = TRIM(?) 
+                   OR (race_id IS NOT NULL AND race_id = ?)`,
+          args: [raceName, scheduleRaceId]
+        });
+        const predictions = predictionsRs.rows as any[];
+
+        for (const pred of predictions) {
+          let points = 0;
+          let correctCount = 0;
+
+          // Pole
+          if (pred.pole_driver_id === poleDriverId) { points += 10; correctCount++; }
+          
+          // P1
+          if (pred.p1_driver_id === finishers[0]) { points += 25; correctCount++; }
+          else if (pred.p1_driver_id === finishers[1] || pred.p1_driver_id === finishers[2]) { points += 5; } // Podium Bonus
+
+          // P2
+          if (pred.p2_driver_id === finishers[1]) { points += 18; correctCount++; }
+
+          // P3
+          if (pred.p3_driver_id === finishers[2]) { points += 15; correctCount++; }
+
+          // Fastest Lap
+          if (pred.fastest_lap_driver_id === fastestLapDriverId) { points += 10; correctCount++; }
+
+          // Perfect Weekend
+          if (correctCount === 5) points += 50;
+
+          await tx.execute({
+            sql: "UPDATE predictions SET points = ?, processed = 1 WHERE id = ?",
+            args: [points, pred.id]
+          });
+        }
 
         await tx.commit();
         res.json({ success: true });

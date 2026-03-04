@@ -211,7 +211,7 @@ function AdminPanel({
 
   const fetchRaces = async () => {
     try {
-      const data = await safeFetch('/api/races');
+      const data = await safeFetch('/api/race-results');
       if (data) setRaces(data);
     } catch (e) {
       console.error(e);
@@ -572,9 +572,614 @@ function AdminPanel({
   );
 }
 
+function PredictionsView({ 
+  user, 
+  drivers, 
+  races,
+  onBack
+}: { 
+  user: User, 
+  drivers: Driver[], 
+  races: any[],
+  onBack: () => void
+}) {
+  const [viewState, setViewState] = useState<'schedule' | 'detail'>('schedule');
+  const [selectedRace, setSelectedRace] = useState<string>('');
+  const [selectedRaceId, setSelectedRaceId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'predict' | 'leaderboard' | 'global'>('predict');
+  
+  const [prediction, setPrediction] = useState<any>({
+    poleDriverId: '',
+    p1DriverId: '',
+    p2DriverId: '',
+    p3DriverId: '',
+    fastestLapDriverId: ''
+  });
+  const [hasPrediction, setHasPrediction] = useState(false);
+  const [raceLeaderboard, setRaceLeaderboard] = useState<any[]>([]);
+  const [leaderboardDebug, setLeaderboardDebug] = useState<any>(null);
+  const [globalLeaderboard, setGlobalLeaderboard] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [message, setMessage] = useState('');
+  const [viewingUserPrediction, setViewingUserPrediction] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetchGlobalLeaderboard();
+  }, []);
+
+  const fetchGlobalLeaderboard = async () => {
+    try {
+      const data = await safeFetch('/api/predictions/global-leaderboard');
+      if (data) setGlobalLeaderboard(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRaceId || selectedRace) {
+      fetchPrediction(selectedRaceId, selectedRace);
+      fetchRaceLeaderboard(selectedRaceId, selectedRace);
+    }
+  }, [selectedRaceId, selectedRace]);
+
+  const fetchPrediction = async (raceId: number | null, raceName: string) => {
+    try {
+      const url = raceId 
+        ? `/api/predictions/user/${user.id}/id/${raceId}?t=${Date.now()}`
+        : `/api/predictions/user/${user.id}/${encodeURIComponent(raceName.trim())}?t=${Date.now()}`;
+        
+      const data = await safeFetch(url);
+      if (data) {
+        setPrediction({
+          poleDriverId: data.pole_driver_id || '',
+          p1DriverId: data.p1_driver_id || '',
+          p2DriverId: data.p2_driver_id || '',
+          p3DriverId: data.p3_driver_id || '',
+          fastestLapDriverId: data.fastest_lap_driver_id || ''
+        });
+        setHasPrediction(true);
+      } else {
+        setPrediction({
+          poleDriverId: '',
+          p1DriverId: '',
+          p2DriverId: '',
+          p3DriverId: '',
+          fastestLapDriverId: ''
+        });
+        setHasPrediction(false);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchRaceLeaderboard = async (raceId: number | null, raceName: string) => {
+    if (!raceId && !raceName) return;
+    console.log("[DEBUG] fetchRaceLeaderboard called with:", { raceId, raceName });
+    setLoadingLeaderboard(true);
+    setLeaderboardDebug(null);
+    try {
+      // Always prefer ID if available, but fallback to name
+      const url = raceId 
+        ? `/api/predictions/leaderboard/id/${raceId}?t=${Date.now()}`
+        : `/api/predictions/leaderboard/${encodeURIComponent(raceName.trim())}?t=${Date.now()}`;
+      
+      console.log("[DEBUG] Fetching leaderboard from URL:", url);
+      const data = await safeFetch(url);
+      if (data) {
+        // Handle both array response and object with leaderboard property
+        if (data.leaderboard && Array.isArray(data.leaderboard)) {
+          setRaceLeaderboard(data.leaderboard);
+          setLeaderboardDebug(data._debug);
+        } else if (Array.isArray(data)) {
+          setRaceLeaderboard(data);
+        } else {
+          setRaceLeaderboard([]);
+        }
+      }
+    } catch (e) {
+      console.error("Leaderboard fetch error:", e);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
+  const handleSelectRace = (race: any) => {
+    console.log("[DEBUG] handleSelectRace called with:", race);
+    setSelectedRace(race.name.trim());
+    setSelectedRaceId(race.id);
+    setViewState('detail');
+    setViewingUserPrediction(null);
+    setRaceLeaderboard([]);
+    setActiveTab('predict'); 
+  };
+
+  const handleSave = async () => {
+    if (!selectedRace) return;
+    
+    // Validation: Check for duplicates in Podium (P1, P2, P3)
+    const podiumPicks = [prediction.p1DriverId, prediction.p2DriverId, prediction.p3DriverId].filter(Boolean);
+    const uniquePicks = new Set(podiumPicks);
+    if (podiumPicks.length !== uniquePicks.size) {
+      setMessage('Error: You cannot select the same driver for multiple podium positions.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+    try {
+      await safeFetch('/api/predictions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          raceName: selectedRace.trim(),
+          raceId: selectedRaceId,
+          ...prediction
+        })
+      });
+      setMessage('Prediction saved!');
+      setHasPrediction(true);
+      
+      // Refresh data
+      await Promise.all([
+        fetchPrediction(selectedRaceId, selectedRace),
+        fetchRaceLeaderboard(selectedRaceId, selectedRace),
+        fetchGlobalLeaderboard()
+      ]);
+      
+      // Switch to leaderboard to show the user their entry
+      setActiveTab('leaderboard');
+      
+      setTimeout(() => setMessage(''), 3000);
+    } catch (e) {
+      console.error(e);
+      setMessage('Failed to save.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAvailableDrivers = (currentId: string, otherIds: string[]) => {
+    return drivers.map(d => ({
+      ...d,
+      disabled: otherIds.includes(d.id) && d.id !== currentId
+    }));
+  };
+
+  const getDriverName = (id: string) => drivers.find(d => d.id === id)?.name || id;
+
+  if (viewState === 'schedule') {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <button 
+              onClick={onBack}
+              className="text-sm text-white/50 hover:text-white flex items-center gap-1 mb-2"
+            >
+              ← BACK TO DASHBOARD
+            </button>
+            <h2 className="text-3xl font-display font-black italic flex items-center gap-3">
+              <Zap className="w-8 h-8 text-f1-red" /> 2026 SEASON SCHEDULE
+            </h2>
+            <p className="text-white/60">Select a race to make your predictions or view the leaderboard.</p>
+          </div>
+        </div>
+
+        {/* Global Leaderboard Summary */}
+        <div className="f1-card p-6 bg-white/5 border-white/10">
+          <h3 className="text-xl font-bold italic mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-yellow-400" /> GLOBAL PREDICTIONS STANDINGS
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {globalLeaderboard.slice(0, 4).map((entry, idx) => (
+              <div key={idx} className="bg-black/20 p-4 rounded-lg border border-white/5 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-f1-red font-bold">{idx + 1}</span>
+                  <span className="font-bold truncate max-w-[100px]">{entry.name}</span>
+                </div>
+                <span className="font-mono font-bold text-lg">{entry.total_points} <span className="text-[10px] text-white/40">PTS</span></span>
+              </div>
+            ))}
+            {globalLeaderboard.length === 0 && (
+              <div className="col-span-full text-center py-4 text-white/20 italic">
+                No points awarded yet. Predictions are processed after each race.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {races.map((race) => (
+            <button
+              key={race.name}
+              onClick={() => handleSelectRace(race)}
+              className="f1-card p-6 text-left hover:border-f1-red transition-all group relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                <Car className="w-24 h-24" />
+              </div>
+              <div className="relative z-10">
+                <span className="text-xs font-mono text-f1-red font-bold uppercase tracking-widest">Round {race.round}</span>
+                <h3 className="text-xl font-bold italic mt-1 mb-2">{race.name}</h3>
+                <div className="flex items-center gap-2 text-sm text-white/60">
+                  <span className="font-mono">{new Date(race.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <button 
+            onClick={() => {
+              setViewState('schedule');
+              setViewingUserPrediction(null);
+            }}
+            className="text-sm text-white/50 hover:text-white flex items-center gap-1 mb-2"
+          >
+            ← BACK TO SCHEDULE
+          </button>
+          <h2 className="text-3xl font-display font-black italic flex items-center gap-3">
+            {selectedRace.toUpperCase()}
+          </h2>
+        </div>
+        <div className="flex bg-white/5 rounded-lg p-1 w-full md:w-auto">
+          <button
+            onClick={() => {
+              setActiveTab('predict');
+              setViewingUserPrediction(null);
+            }}
+            className={cn(
+              "px-4 py-2 rounded-md text-sm font-bold uppercase transition-colors",
+              activeTab === 'predict' ? "bg-f1-red text-white" : "text-white/40 hover:text-white"
+            )}
+          >
+            {hasPrediction ? 'Edit My Picks' : 'Make Picks'}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('leaderboard');
+              setViewingUserPrediction(null);
+              fetchRaceLeaderboard(selectedRaceId, selectedRace);
+            }}
+            className={cn(
+              "px-4 py-2 rounded-md text-sm font-bold uppercase transition-colors",
+              activeTab === 'leaderboard' ? "bg-f1-red text-white" : "text-white/40 hover:text-white"
+            )}
+          >
+            Race Leaderboard
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('global');
+              setViewingUserPrediction(null);
+              fetchGlobalLeaderboard();
+            }}
+            className={cn(
+              "px-4 py-2 rounded-md text-sm font-bold uppercase transition-colors",
+              activeTab === 'global' ? "bg-f1-red text-white" : "text-white/40 hover:text-white"
+            )}
+          >
+            Global Standings
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'predict' ? (
+        <div className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="f1-card p-6 space-y-6">
+              <h3 className="text-xl font-bold italic border-b border-white/10 pb-4">PODIUM PREDICTIONS</h3>
+              
+              <div>
+                <label className="block text-xs font-mono text-yellow-400 uppercase mb-2 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" /> Winner (P1) - 25 PTS
+                </label>
+                <select 
+                  value={prediction.p1DriverId}
+                  onChange={(e) => setPrediction({...prediction, p1DriverId: e.target.value})}
+                  className="f1-input w-full"
+                >
+                  <option value="">Select Driver...</option>
+                  {getAvailableDrivers(prediction.p1DriverId, [prediction.p2DriverId, prediction.p3DriverId]).map(d => (
+                    <option key={d.id} value={d.id} disabled={d.disabled}>
+                      {d.name} {d.disabled ? '(Selected)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-gray-300 uppercase mb-2 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" /> Second Place (P2) - 18 PTS
+                </label>
+                <select 
+                  value={prediction.p2DriverId}
+                  onChange={(e) => setPrediction({...prediction, p2DriverId: e.target.value})}
+                  className="f1-input w-full"
+                >
+                  <option value="">Select Driver...</option>
+                  {getAvailableDrivers(prediction.p2DriverId, [prediction.p1DriverId, prediction.p3DriverId]).map(d => (
+                    <option key={d.id} value={d.id} disabled={d.disabled}>
+                      {d.name} {d.disabled ? '(Selected)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-amber-600 uppercase mb-2 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" /> Third Place (P3) - 15 PTS
+                </label>
+                <select 
+                  value={prediction.p3DriverId}
+                  onChange={(e) => setPrediction({...prediction, p3DriverId: e.target.value})}
+                  className="f1-input w-full"
+                >
+                  <option value="">Select Driver...</option>
+                  {getAvailableDrivers(prediction.p3DriverId, [prediction.p1DriverId, prediction.p2DriverId]).map(d => (
+                    <option key={d.id} value={d.id} disabled={d.disabled}>
+                      {d.name} {d.disabled ? '(Selected)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="f1-card p-6 space-y-6">
+              <h3 className="text-xl font-bold italic border-b border-white/10 pb-4">BONUS PREDICTIONS</h3>
+              
+              <div>
+                <label className="block text-xs font-mono text-purple-400 uppercase mb-2 flex items-center gap-2">
+                  <Zap className="w-4 h-4" /> Pole Position - 10 PTS
+                </label>
+                <select 
+                  value={prediction.poleDriverId}
+                  onChange={(e) => setPrediction({...prediction, poleDriverId: e.target.value})}
+                  className="f1-input w-full"
+                >
+                  <option value="">Select Driver...</option>
+                  {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-f1-red uppercase mb-2 flex items-center gap-2">
+                  <Zap className="w-4 h-4" /> Fastest Lap - 10 PTS
+                </label>
+                <select 
+                  value={prediction.fastestLapDriverId}
+                  onChange={(e) => setPrediction({...prediction, fastestLapDriverId: e.target.value})}
+                  className="f1-input w-full"
+                >
+                  <option value="">Select Driver...</option>
+                  {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+
+              <div className="pt-8">
+                <button 
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="f1-button w-full py-4 text-xl"
+                >
+                  {loading ? 'SAVING...' : 'LOCK IN PREDICTIONS'}
+                </button>
+                {message && (
+                  <div className={cn(
+                    "text-center mt-4 font-bold animate-pulse",
+                    message.startsWith('Error') ? "text-f1-red" : "text-emerald-400"
+                  )}>
+                    {message}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : activeTab === 'leaderboard' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 f1-card overflow-hidden">
+            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+              <h3 className="font-bold italic text-lg flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-f1-red" /> 
+                LEADERBOARD: {selectedRace}
+              </h3>
+              <button 
+                onClick={() => fetchRaceLeaderboard(selectedRaceId, selectedRace)}
+                className={cn(
+                  "text-xs font-bold uppercase flex items-center gap-1 transition-colors",
+                  loadingLeaderboard ? "text-f1-red animate-pulse" : "text-white/40 hover:text-white"
+                )}
+                disabled={loadingLeaderboard}
+              >
+                <Zap className={cn("w-3 h-3", loadingLeaderboard && "animate-spin")} /> 
+                {loadingLeaderboard ? 'FETCHING...' : 'REFRESH'}
+              </button>
+            </div>
+            <table className="w-full text-left">
+              <thead className="bg-white/5 text-xs font-mono text-white/40">
+                <tr>
+                  <th className="px-6 py-4">RANK</th>
+                  <th className="px-6 py-4">USER</th>
+                  <th className="px-6 py-4 text-right">POINTS</th>
+                  <th className="px-6 py-4 text-right">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {raceLeaderboard.map((entry, idx) => (
+                  <tr key={idx} className={cn(entry.name === user.name && "bg-white/5")}>
+                    <td className="px-6 py-4 font-mono font-bold text-lg w-20">
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                    </td>
+                    <td className="px-6 py-4 font-bold text-lg">{entry.name || 'Anonymous Racer'}</td>
+                    <td className="px-6 py-4 text-right font-mono font-bold text-f1-red text-xl">{entry.points}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => setViewingUserPrediction(entry)}
+                        className="text-xs font-bold uppercase text-white/40 hover:text-white transition-colors"
+                      >
+                        VIEW PICKS
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {raceLeaderboard.length === 0 && !loadingLeaderboard && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-white/20 italic">
+                      <div className="mb-4">No predictions yet for this race. Be the first!</div>
+                      {hasPrediction && (
+                        <div className="text-f1-red mt-2 text-xs font-mono border border-f1-red/20 p-4 rounded bg-f1-red/5 max-w-md mx-auto">
+                          <div className="font-bold mb-2">DEBUG INFO:</div>
+                          <div className="text-left space-y-1 opacity-80">
+                            <div>• Your prediction is saved in the database.</div>
+                            <div>• Selected Race: <span className="text-white">"{selectedRace}"</span></div>
+                            <div>• Selected Race ID: <span className="text-white">{selectedRaceId || 'NULL'}</span></div>
+                            {leaderboardDebug && (
+                              <>
+                                <div className="pt-2 border-t border-f1-red/10 mt-2">SERVER DEBUG:</div>
+                                <div>• Queried Name: <span className="text-white">"{leaderboardDebug.queriedRaceName}"</span></div>
+                                <div>• Found ID: <span className="text-white">{leaderboardDebug.foundRaceId || 'NONE'}</span></div>
+                                <div>• Sample Predictions in DB:</div>
+                                <div className="pl-2 text-[10px] overflow-x-auto">
+                                  {leaderboardDebug.availablePredictions?.map((p: any, i: number) => (
+                                    <div key={i}>- {p.race_name} (ID: {p.race_id})</div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <button 
+                            onClick={() => fetchRaceLeaderboard(selectedRaceId, selectedRace)}
+                            className="mt-4 px-4 py-2 bg-f1-red text-white rounded text-xs font-bold uppercase hover:bg-f1-red/80 transition-colors"
+                          >
+                            Force Refresh
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                {loadingLeaderboard && raceLeaderboard.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-white/20 italic">
+                      Loading leaderboard...
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="lg:col-span-1">
+            <AnimatePresence mode="wait">
+              {viewingUserPrediction ? (
+                <motion.div 
+                  key="user-picks"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="f1-card p-6 space-y-6 sticky top-20"
+                >
+                  <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                    <h3 className="text-xl font-bold italic">{viewingUserPrediction.name}'s Picks</h3>
+                    <button onClick={() => setViewingUserPrediction(null)}><X className="w-5 h-5 text-white/40 hover:text-white" /></button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-xs font-mono text-yellow-400 uppercase block mb-1">Winner (P1)</span>
+                      <div className="font-bold text-lg">{getDriverName(viewingUserPrediction.p1_driver_id)}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-mono text-gray-300 uppercase block mb-1">Second (P2)</span>
+                      <div className="font-bold text-lg">{getDriverName(viewingUserPrediction.p2_driver_id)}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-mono text-amber-600 uppercase block mb-1">Third (P3)</span>
+                      <div className="font-bold text-lg">{getDriverName(viewingUserPrediction.p3_driver_id)}</div>
+                    </div>
+                    <div className="pt-4 border-t border-white/10">
+                      <span className="text-xs font-mono text-purple-400 uppercase block mb-1">Pole Position</span>
+                      <div className="font-bold text-lg">{getDriverName(viewingUserPrediction.pole_driver_id)}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-mono text-f1-red uppercase block mb-1">Fastest Lap</span>
+                      <div className="font-bold text-lg">{getDriverName(viewingUserPrediction.fastest_lap_driver_id)}</div>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="f1-card p-8 text-center text-white/20 italic h-full flex items-center justify-center border-dashed border-white/10">
+                  Select a user to view their predictions
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      ) : (
+        <div className="f1-card overflow-hidden">
+          <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+            <h3 className="font-bold italic text-lg flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" /> 
+              GLOBAL PREDICTIONS STANDINGS
+            </h3>
+            <button 
+              onClick={() => fetchGlobalLeaderboard()}
+              className="text-xs font-bold uppercase text-white/40 hover:text-white flex items-center gap-1"
+            >
+              <Zap className="w-3 h-3" /> REFRESH
+            </button>
+          </div>
+          <table className="w-full text-left">
+            <thead className="bg-white/5 text-xs font-mono text-white/40">
+              <tr>
+                <th className="px-6 py-4">RANK</th>
+                <th className="px-6 py-4">USER</th>
+                <th className="px-6 py-4 text-right">TOTAL POINTS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {globalLeaderboard.map((entry, idx) => (
+                <tr key={idx} className={cn(entry.name === user.name && "bg-white/5")}>
+                  <td className="px-6 py-4 font-mono font-bold text-lg w-20">
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                  </td>
+                  <td className="px-6 py-4 font-bold text-lg">{entry.name}</td>
+                  <td className="px-6 py-4 text-right font-mono font-bold text-yellow-400 text-xl">{entry.total_points}</td>
+                </tr>
+              ))}
+              {globalLeaderboard.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-white/20 italic">
+                    No points awarded yet. Predictions are processed after each race.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* DEBUG SECTION */}
+      
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'landing' | 'dashboard' | 'league' | 'draft' | 'admin' | 'results' | 'scoring'>('landing');
+  const [view, setView] = useState<'landing' | 'dashboard' | 'league' | 'draft' | 'admin' | 'results' | 'scoring' | 'predictions'>('landing');
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -1090,6 +1695,17 @@ export default function App() {
             </motion.div>
           )}
 
+          {view === 'predictions' && user && (
+            <motion.div
+              key="predictions"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <PredictionsView user={user} drivers={drivers} races={races} onBack={() => setView('dashboard')} />
+            </motion.div>
+          )}
+
           {view === 'dashboard' && (
             <motion.div 
               key="dashboard"
@@ -1098,6 +1714,30 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="space-y-12 py-8"
             >
+              {/* PREDICTIONS BANNER */}
+              <div 
+                onClick={() => setView('predictions')}
+                className="f1-card p-6 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border-purple-500/30 cursor-pointer hover:border-purple-500/60 transition-all group relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Zap className="w-32 h-32" />
+                </div>
+                <div className="relative z-10 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-black italic flex items-center gap-2 mb-2">
+                      <Zap className="w-6 h-6 text-purple-400 fill-current" /> 
+                      PREDICTIONS LEAGUE
+                    </h2>
+                    <p className="text-white/60 max-w-md">
+                      Predict the podium, pole position, and fastest lap for the next race to earn bonus points!
+                    </p>
+                  </div>
+                  <div className="bg-purple-500/20 p-3 rounded-full group-hover:bg-purple-500/40 transition-colors">
+                    <ChevronRight className="w-6 h-6 text-purple-400" />
+                  </div>
+                </div>
+              </div>
+
               {/* MY TEAMS SECTION */}
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1349,104 +1989,114 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {standings.map((s, idx) => (
-                          <tr 
-                            key={idx} 
-                            onClick={() => setViewingTeam(s)}
-                            className={cn(
-                              "hover:bg-white/5 transition-colors cursor-pointer", 
-                              s.name === user?.name && "bg-f1-red/10"
-                            )}
-                          >
-                            <td className="px-6 py-4 font-mono font-bold text-lg">
-                              {idx + 1}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="font-bold flex items-center gap-2">
-                                <span>{s.name}</span>
-                                {s.is_complete === 0 && (
-                                  <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                    Incomplete
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex -space-x-2">
-                                {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].map(id => {
-                                  const d = drivers.find(item => item.id === id);
-                                  return d ? (
-                                    <img 
-                                      key={id}
-                                      src={d.image} 
-                                      className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray" 
-                                      alt={d.name}
-                                    />
-                                  ) : null;
-                                })}
-                                {[s.constructor1_id, s.constructor2_id].map(id => {
-                                  const c = constructors.find(item => item.id === id);
-                                  return c ? (
-                                    <img 
-                                      key={id}
-                                      src={c.image} 
-                                      className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray object-contain p-1" 
-                                      alt={c.name}
-                                    />
-                                  ) : null;
-                                })}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right font-mono font-bold text-f1-red">
-                              {s.points}
-                            </td>
-                          </tr>
-                        ))}
+                        <AnimatePresence>
+                          {standings.map((s, idx) => (
+                            <motion.tr 
+                              key={idx} 
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.05, duration: 0.3 }}
+                              onClick={() => setViewingTeam(s)}
+                              className={cn(
+                                "hover:bg-white/5 transition-colors cursor-pointer", 
+                                s.name === user?.name && "bg-f1-red/10"
+                              )}
+                            >
+                              <td className="px-6 py-4 font-mono font-bold text-lg">
+                                {idx + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-bold flex items-center gap-2">
+                                  <span>{s.name}</span>
+                                  {s.is_complete === 0 && (
+                                    <span className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                      Incomplete
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex -space-x-2">
+                                  {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].map(id => {
+                                    const d = drivers.find(item => item.id === id);
+                                    return d ? (
+                                      <img 
+                                        key={id}
+                                        src={d.image} 
+                                        className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray" 
+                                        alt={d.name}
+                                      />
+                                    ) : null;
+                                  })}
+                                  {[s.constructor1_id, s.constructor2_id].map(id => {
+                                    const c = constructors.find(item => item.id === id);
+                                    return c ? (
+                                      <img 
+                                        key={id}
+                                        src={c.image} 
+                                        className="w-8 h-8 rounded-full border-2 border-f1-dark bg-f1-gray object-contain p-1" 
+                                        alt={c.name}
+                                      />
+                                    ) : null;
+                                  })}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right font-mono font-bold text-f1-red">
+                                {s.points}
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
                       </tbody>
                     </table>
                   </div>
 
                   {/* Mobile Card List */}
                   <div className="md:hidden space-y-3">
-                    {standings.map((s, idx) => (
-                      <div 
-                        key={idx}
-                        onClick={() => setViewingTeam(s)}
-                        className={cn(
-                          "f1-card p-4 flex items-center justify-between gap-4 active:scale-[0.98] transition-transform",
-                          s.name === user?.name && "border-f1-red bg-f1-red/5"
-                        )}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className={cn(
-                            "font-mono font-bold text-xl w-8 text-center",
-                            idx === 0 ? "text-yellow-400" : idx === 1 ? "text-gray-400" : idx === 2 ? "text-amber-700" : "text-white/40"
-                          )}>
-                            {idx + 1}
-                          </span>
-                          <div>
-                            <div className="font-bold text-lg leading-tight">{s.name}</div>
-                            <div className="flex -space-x-1 mt-1">
-                              {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].slice(0, 3).map(id => {
-                                const d = drivers.find(item => item.id === id);
-                                return d ? (
-                                  <img key={id} src={d.image} className="w-5 h-5 rounded-full border border-f1-dark bg-f1-gray" alt="" />
-                                ) : null;
-                              })}
-                              {([s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].length > 3 || [s.constructor1_id, s.constructor2_id].length > 0) && (
-                                <div className="w-5 h-5 rounded-full border border-f1-dark bg-white/10 flex items-center justify-center text-[8px] font-bold">
-                                  +
-                                </div>
-                              )}
+                    <AnimatePresence>
+                      {standings.map((s, idx) => (
+                        <motion.div 
+                          key={idx}
+                          initial={{ opacity: 0, x: -50 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05, type: "spring", stiffness: 100 }}
+                          onClick={() => setViewingTeam(s)}
+                          className={cn(
+                            "f1-card p-4 flex items-center justify-between gap-4 active:scale-[0.98] transition-transform",
+                            s.name === user?.name && "border-f1-red bg-f1-red/5"
+                          )}
+                        >
+                          <div className="flex items-center gap-4">
+                            <span className={cn(
+                              "font-mono font-bold text-xl w-8 text-center",
+                              idx === 0 ? "text-yellow-400" : idx === 1 ? "text-gray-400" : idx === 2 ? "text-amber-700" : "text-white/40"
+                            )}>
+                              {idx + 1}
+                            </span>
+                            <div>
+                              <div className="font-bold text-lg leading-tight">{s.name}</div>
+                              <div className="flex -space-x-1 mt-1">
+                                {[s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].slice(0, 3).map(id => {
+                                  const d = drivers.find(item => item.id === id);
+                                  return d ? (
+                                    <img key={id} src={d.image} className="w-5 h-5 rounded-full border border-f1-dark bg-f1-gray" alt="" />
+                                  ) : null;
+                                })}
+                                {([s.driver1_id, s.driver2_id, s.driver3_id, s.driver4_id, s.driver5_id].length > 3 || [s.constructor1_id, s.constructor2_id].length > 0) && (
+                                  <div className="w-5 h-5 rounded-full border border-f1-dark bg-white/10 flex items-center justify-center text-[8px] font-bold">
+                                    +
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-mono font-bold text-xl text-f1-red">{s.points}</div>
-                          <div className="text-[10px] text-white/40 uppercase font-bold">PTS</div>
-                        </div>
-                      </div>
-                    ))}
+                          <div className="text-right">
+                            <div className="font-mono font-bold text-xl text-f1-red">{s.points}</div>
+                            <div className="text-[10px] text-white/40 uppercase font-bold">PTS</div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                     {standings.length === 0 && (
                       <div className="text-center p-8 text-white/20 italic border border-dashed border-white/10 rounded-xl">
                         No teams yet.
@@ -1987,9 +2637,7 @@ export default function App() {
             <a href="#" className="hover:text-f1-red transition-colors">SUPPORT</a>
           </div>
         </div>
-        <div className="text-center text-xs text-white/20 mt-4">
-          Debug: Drivers: {drivers.length} | Constructors: {constructors.length} | User: {user ? user.name : 'None'}
-        </div>
+        
       </footer>
 
       {/* Delete Confirmation Modal */}
