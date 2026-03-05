@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -15,7 +15,9 @@ import {
   User as UserIcon,
   Copy,
   Check,
-  X
+  X,
+  Lock,
+  LockOpen
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -64,7 +66,12 @@ function RaceResults({
       </h3>
       <div className="grid gap-4">
         {races.map((race) => {
-          const results = JSON.parse(race.results_json);
+          let results: any = {};
+          try {
+            results = (race.results_json && race.results_json !== "undefined") ? JSON.parse(race.results_json) : {};
+          } catch (e) {
+            console.error("Error parsing results JSON:", e);
+          }
           const isExpanded = expandedRaceId === race.id;
 
           return (
@@ -101,7 +108,7 @@ function RaceResults({
                   <div>
                     <div className="text-xs font-bold text-white/40 mb-2 uppercase tracking-wider">Top 10 Finishers</div>
                     <div className="space-y-1">
-                      {results.finishers.map((id: string, i: number) => {
+                      {results.finishers?.map((id: string, i: number) => {
                         let pts = i < 10 ? 10 - i : 0;
                         if (i < 10 && id === results.fastestLapDriverId) pts += 5;
                         if (id === results.poleDriverId) pts += 5;
@@ -197,8 +204,9 @@ function AdminPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);
-  const [view, setView] = useState<'race' | 'leagues' | 'history'>('race');
-  const [races, setRaces] = useState<any[]>([]);
+  const [view, setView] = useState<'race' | 'leagues' | 'history' | 'predictions'>('predictions');
+  const [raceResults, setRaceResults] = useState<any[]>([]);
+  const [schedule, setSchedule] = useState<any[]>([]);
   const [editingRaceId, setEditingRaceId] = useState<number | null>(null);
 
   // League creation state
@@ -206,27 +214,71 @@ function AdminPanel({
 
   useEffect(() => {
     fetchLeagues();
-    fetchRaces();
+    fetchRaceResults();
+    fetchSchedule();
   }, []);
 
-  const fetchRaces = async () => {
+  const fetchRaceResults = async () => {
     try {
       const data = await safeFetch('/api/race-results');
-      if (data) setRaces(data);
+      if (data) setRaceResults(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchSchedule = async () => {
+    try {
+      const data = await safeFetch('/api/races');
+      if (data) setSchedule(data);
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleEditRace = (race: any) => {
-    const results = JSON.parse(race.results_json);
+    let results: any = {};
+    try {
+      results = (race.results_json && race.results_json !== "undefined") ? JSON.parse(race.results_json) : {};
+    } catch (e) {
+      console.error("Error parsing results JSON:", e);
+    }
     setRaceName(race.race_name);
-    setPoleDriverId(results.poleDriverId);
-    setFastestLapDriverId(results.fastestLapDriverId);
-    setFinishers(results.finishers);
+    setPoleDriverId(results.poleDriverId || '');
+    setFastestLapDriverId(results.fastestLapDriverId || '');
+    setFinishers(results.finishers || Array(10).fill(''));
     setDnfs(results.dnfs || []);
     setEditingRaceId(race.id);
     setView('race');
+  };
+
+  const handleOpenResults = (race: any) => {
+    // Try to find existing results for this race
+    const existingResult = raceResults.find((r: any) => r.race_name === race.name);
+    if (existingResult) {
+      handleEditRace(existingResult);
+    } else {
+      setRaceName(race.name);
+      setPoleDriverId('');
+      setFastestLapDriverId('');
+      setFinishers(Array(10).fill(''));
+      setDnfs([]);
+      setEditingRaceId(null);
+      setView('race');
+    }
+  };
+
+  const toggleRaceLock = async (id: number, currentLockStatus: number) => {
+    try {
+      await safeFetch(`/api/races/${id}/lock`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked: !currentLockStatus })
+      });
+      fetchSchedule();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const fetchLeagues = async () => {
@@ -347,6 +399,12 @@ function AdminPanel({
           </button>
           <div className="flex bg-white/5 rounded-lg p-1">
             <button 
+              onClick={() => setView('predictions')}
+              className={cn("px-4 py-2 rounded text-xs font-bold uppercase", view === 'predictions' && "bg-white/10")}
+            >
+              Predictions
+            </button>
+            <button 
               onClick={() => {
                 setView('race');
                 setEditingRaceId(null);
@@ -358,7 +416,7 @@ function AdminPanel({
               }}
               className={cn("px-4 py-2 rounded text-xs font-bold uppercase", view === 'race' && "bg-white/10")}
             >
-              Race
+              Process
             </button>
             <button 
               onClick={() => setView('history')}
@@ -378,7 +436,50 @@ function AdminPanel({
 
       <h2 className="text-2xl font-black italic">ADMIN DASHBOARD</h2>
 
-      {view === 'leagues' ? (
+      {view === 'predictions' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {schedule.map((race) => (
+            <div key={race.id} className="f1-card p-6 flex flex-col justify-between h-full">
+              <div className="mb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-mono text-f1-red font-bold">ROUND {race.round}</span>
+                  {race.is_locked === 1 && (
+                    <span className="bg-f1-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" /> Locked
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-xl font-bold italic leading-tight mb-1">{race.name}</h3>
+                <p className="text-xs text-white/40 font-mono">{race.date}</p>
+              </div>
+              
+              <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
+                <button 
+                  onClick={() => toggleRaceLock(race.id, race.is_locked)}
+                  className={cn(
+                    "flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2",
+                    race.is_locked 
+                      ? "bg-white/10 text-white hover:bg-white/20" 
+                      : "bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30"
+                  )}
+                >
+                  {race.is_locked ? (
+                    <>Unlock</>
+                  ) : (
+                    <>Lock</>
+                  )}
+                </button>
+                <button 
+                  onClick={() => handleOpenResults(race)}
+                  className="flex-1 bg-f1-red text-white py-2 rounded text-xs font-bold uppercase tracking-wider hover:bg-red-600 transition-colors"
+                >
+                  Results
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : view === 'leagues' ? (
         <div className="space-y-8">
           <div className="f1-card p-6">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -451,7 +552,7 @@ function AdminPanel({
         </div>
         </div>
       ) : view === 'history' ? (
-        <RaceResults races={races} onEdit={handleEditRace} />
+        <RaceResults races={raceResults} onEdit={handleEditRace} />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-8">
           {error && (
@@ -583,7 +684,7 @@ function PredictionsView({
   races: any[],
   onBack: () => void
 }) {
-  const [viewState, setViewState] = useState<'schedule' | 'detail'>('schedule');
+  const [viewState, setViewState] = useState<'schedule' | 'detail' | 'global'>('schedule');
   const [selectedRace, setSelectedRace] = useState<string>('');
   const [selectedRaceId, setSelectedRaceId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'predict' | 'leaderboard' | 'global'>('predict');
@@ -603,6 +704,13 @@ function PredictionsView({
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [message, setMessage] = useState('');
   const [viewingUserPrediction, setViewingUserPrediction] = useState<any | null>(null);
+  const picksRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (viewingUserPrediction && window.innerWidth < 1024) {
+      picksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [viewingUserPrediction]);
 
   useEffect(() => {
     fetchGlobalLeaderboard();
@@ -751,6 +859,71 @@ function PredictionsView({
 
   const getDriverName = (id: string) => drivers.find(d => d.id === id)?.name || id;
 
+  const currentRace = races.find(r => r.id === selectedRaceId);
+  const isRaceLocked = currentRace?.is_locked === 1;
+
+  if (viewState === 'global') {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <button 
+              onClick={() => setViewState('schedule')}
+              className="text-sm text-white/50 hover:text-white flex items-center gap-1 mb-2"
+            >
+              ← BACK TO SCHEDULE
+            </button>
+            <h2 className="text-3xl font-display font-black italic flex items-center gap-3">
+              <Trophy className="w-8 h-8 text-yellow-400" /> GLOBAL LEADERBOARD
+            </h2>
+          </div>
+        </div>
+
+        <div className="f1-card overflow-hidden">
+          <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+            <h3 className="font-bold italic text-lg flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" /> 
+              GLOBAL STANDINGS
+            </h3>
+            <button 
+              onClick={() => fetchGlobalLeaderboard()}
+              className="text-xs font-bold uppercase text-white/40 hover:text-white flex items-center gap-1"
+            >
+              <Zap className="w-3 h-3" /> REFRESH
+            </button>
+          </div>
+          <table className="w-full text-left">
+            <thead className="bg-white/5 text-xs font-mono text-white/40">
+              <tr>
+                <th className="px-6 py-4">RANK</th>
+                <th className="px-6 py-4">USER</th>
+                <th className="px-6 py-4 text-right">TOTAL POINTS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {globalLeaderboard.map((entry, idx) => (
+                <tr key={idx} className={cn(entry.name === user.name && "bg-white/5")}>
+                  <td className="px-6 py-4 font-mono font-bold text-lg w-20">
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                  </td>
+                  <td className="px-6 py-4 font-bold text-lg">{entry.name}</td>
+                  <td className="px-6 py-4 text-right font-mono font-bold text-yellow-400 text-xl">{entry.total_points}</td>
+                </tr>
+              ))}
+              {globalLeaderboard.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-white/20 italic">
+                    No points awarded yet. Predictions are processed after each race.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   if (viewState === 'schedule') {
     return (
       <div className="space-y-8">
@@ -767,29 +940,12 @@ function PredictionsView({
             </h2>
             <p className="text-white/60">Select a race to make your predictions or view the leaderboard.</p>
           </div>
-        </div>
-
-        {/* Global Leaderboard Summary */}
-        <div className="f1-card p-6 bg-white/5 border-white/10">
-          <h3 className="text-xl font-bold italic mb-4 flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-400" /> GLOBAL PREDICTIONS STANDINGS
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {globalLeaderboard.slice(0, 4).map((entry, idx) => (
-              <div key={idx} className="bg-black/20 p-4 rounded-lg border border-white/5 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-f1-red font-bold">{idx + 1}</span>
-                  <span className="font-bold truncate max-w-[100px]">{entry.name}</span>
-                </div>
-                <span className="font-mono font-bold text-lg">{entry.total_points} <span className="text-[10px] text-white/40">PTS</span></span>
-              </div>
-            ))}
-            {globalLeaderboard.length === 0 && (
-              <div className="col-span-full text-center py-4 text-white/20 italic">
-                No points awarded yet. Predictions are processed after each race.
-              </div>
-            )}
-          </div>
+          <button 
+            onClick={() => setViewState('global')}
+            className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded font-bold uppercase text-sm transition-colors flex items-center gap-2"
+          >
+            <Trophy className="w-4 h-4 text-yellow-400" /> Global Leaderboard
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -803,7 +959,18 @@ function PredictionsView({
                 <Car className="w-24 h-24" />
               </div>
               <div className="relative z-10">
-                <span className="text-xs font-mono text-f1-red font-bold uppercase tracking-widest">Round {race.round}</span>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-mono text-f1-red font-bold uppercase tracking-widest">Round {race.round}</span>
+                  {race.is_locked === 1 ? (
+                    <span className="bg-f1-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  ) : (
+                    <span className="bg-emerald-500/20 text-emerald-500 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                      <LockOpen className="w-3 h-3" /> Open
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-xl font-bold italic mt-1 mb-2">{race.name}</h3>
                 <div className="flex items-center gap-2 text-sm text-white/60">
                   <span className="font-mono">{new Date(race.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
@@ -831,6 +998,11 @@ function PredictionsView({
           </button>
           <h2 className="text-3xl font-display font-black italic flex items-center gap-3">
             {selectedRace.toUpperCase()}
+            {isRaceLocked && (
+              <span className="bg-f1-red text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wider flex items-center gap-1 ml-2">
+                <ShieldCheck className="w-4 h-4" /> Locked
+              </span>
+            )}
           </h2>
         </div>
         <div className="flex bg-white/5 rounded-lg p-1 w-full md:w-auto">
@@ -877,6 +1049,12 @@ function PredictionsView({
 
       {activeTab === 'predict' ? (
         <div className="space-y-6">
+          {isRaceLocked && (
+            <div className="bg-f1-red/20 border border-f1-red text-f1-red p-4 rounded-lg flex items-center gap-3 font-bold">
+              <ShieldCheck className="w-5 h-5" />
+              This race is locked. Predictions can no longer be edited.
+            </div>
+          )}
           <div className="grid gap-6 md:grid-cols-2">
             <div className="f1-card p-6 space-y-6">
               <h3 className="text-xl font-bold italic border-b border-white/10 pb-4">PODIUM PREDICTIONS</h3>
@@ -889,6 +1067,7 @@ function PredictionsView({
                   value={prediction.p1DriverId}
                   onChange={(e) => setPrediction({...prediction, p1DriverId: e.target.value})}
                   className="f1-input w-full"
+                  disabled={isRaceLocked}
                 >
                   <option value="">Select Driver...</option>
                   {getAvailableDrivers(prediction.p1DriverId, [prediction.p2DriverId, prediction.p3DriverId]).map(d => (
@@ -907,6 +1086,7 @@ function PredictionsView({
                   value={prediction.p2DriverId}
                   onChange={(e) => setPrediction({...prediction, p2DriverId: e.target.value})}
                   className="f1-input w-full"
+                  disabled={isRaceLocked}
                 >
                   <option value="">Select Driver...</option>
                   {getAvailableDrivers(prediction.p2DriverId, [prediction.p1DriverId, prediction.p3DriverId]).map(d => (
@@ -925,6 +1105,7 @@ function PredictionsView({
                   value={prediction.p3DriverId}
                   onChange={(e) => setPrediction({...prediction, p3DriverId: e.target.value})}
                   className="f1-input w-full"
+                  disabled={isRaceLocked}
                 >
                   <option value="">Select Driver...</option>
                   {getAvailableDrivers(prediction.p3DriverId, [prediction.p1DriverId, prediction.p2DriverId]).map(d => (
@@ -947,6 +1128,7 @@ function PredictionsView({
                   value={prediction.poleDriverId}
                   onChange={(e) => setPrediction({...prediction, poleDriverId: e.target.value})}
                   className="f1-input w-full"
+                  disabled={isRaceLocked}
                 >
                   <option value="">Select Driver...</option>
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -961,6 +1143,7 @@ function PredictionsView({
                   value={prediction.fastestLapDriverId}
                   onChange={(e) => setPrediction({...prediction, fastestLapDriverId: e.target.value})}
                   className="f1-input w-full"
+                  disabled={isRaceLocked}
                 >
                   <option value="">Select Driver...</option>
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -970,10 +1153,13 @@ function PredictionsView({
               <div className="pt-8">
                 <button 
                   onClick={handleSave}
-                  disabled={loading}
-                  className="f1-button w-full py-4 text-xl"
+                  disabled={loading || isRaceLocked}
+                  className={cn(
+                    "f1-button w-full py-4 text-xl",
+                    isRaceLocked && "opacity-50 cursor-not-allowed bg-white/10 text-white/40 hover:bg-white/10 border-white/10"
+                  )}
                 >
-                  {loading ? 'SAVING...' : 'LOCK IN PREDICTIONS'}
+                  {loading ? 'SAVING...' : isRaceLocked ? 'PREDICTIONS LOCKED' : 'LOCK IN PREDICTIONS'}
                 </button>
                 {message && (
                   <div className={cn(
@@ -1022,7 +1208,13 @@ function PredictionsView({
                     <td className="px-6 py-4 font-mono font-bold text-lg w-20">
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                     </td>
-                    <td className="px-6 py-4 font-bold text-lg">{entry.name || 'Anonymous Racer'}</td>
+                    <td 
+                      className="px-6 py-4 font-bold text-lg cursor-pointer hover:text-f1-red transition-colors"
+                      onClick={() => setViewingUserPrediction(entry)}
+                      title="Click to view picks"
+                    >
+                      {entry.name || 'Anonymous Racer'}
+                    </td>
                     <td className="px-6 py-4 text-right font-mono font-bold text-f1-red text-xl">{entry.points}</td>
                     <td className="px-6 py-4 text-right">
                       <button 
@@ -1081,7 +1273,7 @@ function PredictionsView({
             </table>
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1" ref={picksRef}>
             <AnimatePresence mode="wait">
               {viewingUserPrediction ? (
                 <motion.div 
@@ -1204,7 +1396,7 @@ export default function App() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('f1_user');
-    if (savedUser) {
+    if (savedUser && savedUser !== "undefined") {
       try {
         const parsed = JSON.parse(savedUser);
         setUser(parsed);
@@ -1212,8 +1404,11 @@ export default function App() {
         fetchLeagues(parsed.id);
         fetchMyTeams(parsed.id);
       } catch (e) {
+        console.error("Failed to parse saved user", e);
         localStorage.removeItem('f1_user');
       }
+    } else {
+      localStorage.removeItem('f1_user');
     }
     
     const init = async () => {

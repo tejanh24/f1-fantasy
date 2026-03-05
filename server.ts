@@ -169,6 +169,12 @@ async function start() {
     } catch (e) {}
     try { await db.execute("ALTER TABLE leagues ADD COLUMN is_locked INTEGER DEFAULT 0"); } catch (e) {}
     try { await db.execute("ALTER TABLE predictions ADD COLUMN race_id INTEGER"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN is_locked INTEGER DEFAULT 0"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN pole_driver_id TEXT"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN p1_driver_id TEXT"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN p2_driver_id TEXT"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN p3_driver_id TEXT"); } catch (e) {}
+    try { await db.execute("ALTER TABLE races ADD COLUMN fastest_lap_driver_id TEXT"); } catch (e) {}
 
     // Aggressive cleanup for race names and IDs
     try {
@@ -300,6 +306,34 @@ async function start() {
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to fetch races" });
+    }
+  });
+
+  app.post("/api/races/:id/lock", async (req, res) => {
+    try {
+      const { locked } = req.body;
+      await db.execute({
+        sql: "UPDATE races SET is_locked = ? WHERE id = ?",
+        args: [locked ? 1 : 0, req.params.id]
+      });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to update race lock status" });
+    }
+  });
+
+  app.post("/api/races/:id/results", async (req, res) => {
+    try {
+      const { poleDriverId, p1DriverId, p2DriverId, p3DriverId, fastestLapDriverId } = req.body;
+      await db.execute({
+        sql: "UPDATE races SET pole_driver_id = ?, p1_driver_id = ?, p2_driver_id = ?, p3_driver_id = ?, fastest_lap_driver_id = ? WHERE id = ?",
+        args: [poleDriverId, p1DriverId, p2DriverId, p3DriverId, fastestLapDriverId, req.params.id]
+      });
+      res.json({ success: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to save race results" });
     }
   });
 
@@ -615,7 +649,6 @@ async function start() {
 
   app.get("/api/predictions/user/:userId/id/:raceId", async (req, res) => {
     try {
-	console.log("Predict");
       const rs = await db.execute({
         sql: "SELECT * FROM predictions WHERE user_id = ? AND race_id = ?",
         args: [req.params.userId, req.params.raceId]
@@ -647,10 +680,21 @@ async function start() {
       let raceId = bodyRaceId;
       if (!raceId) {
         const raceRs = await db.execute({ 
-          sql: "SELECT id FROM races WHERE TRIM(name) = ? OR LOWER(name) = LOWER(?) OR name = ?", 
+          sql: "SELECT id, is_locked FROM races WHERE TRIM(name) = ? OR LOWER(name) = LOWER(?) OR name = ?", 
           args: [raceName.trim(), raceName.trim(), raceName] 
         });
         raceId = raceRs.rows[0]?.id || null;
+        if (raceRs.rows[0]?.is_locked) {
+          return res.status(403).json({ error: "This race is locked for predictions." });
+        }
+      } else {
+        const raceRs = await db.execute({
+          sql: "SELECT is_locked FROM races WHERE id = ?",
+          args: [raceId]
+        });
+        if (raceRs.rows[0]?.is_locked) {
+          return res.status(403).json({ error: "This race is locked for predictions." });
+        }
       }
 
       await db.execute({
@@ -674,7 +718,6 @@ async function start() {
 
   app.get("/api/predictions/leaderboard/id/:raceId", async (req, res) => {
     try {
-console.log("leaddddddd");
       const raceId = Number(req.params.raceId);
       console.log(`[SERVER] API HIT: /api/predictions/leaderboard/id/${raceId}`);
       
@@ -844,6 +887,14 @@ console.log("leaddddddd");
         });
         const scheduleRaceId = raceRs.rows[0]?.id || null;
 
+        if (scheduleRaceId) {
+          // Update the races table with the results
+          await tx.execute({
+            sql: "UPDATE races SET pole_driver_id = ?, p1_driver_id = ?, p2_driver_id = ?, p3_driver_id = ?, fastest_lap_driver_id = ? WHERE id = ?",
+            args: [poleDriverId, finishers[0], finishers[1], finishers[2], fastestLapDriverId, scheduleRaceId]
+          });
+        }
+
         // 2. Calculate Points
         const driverPoints: Record<string, number> = {};
         finishers.forEach((driverId: string, index: number) => {
@@ -914,7 +965,6 @@ console.log("leaddddddd");
           
           // P1
           if (pred.p1_driver_id === finishers[0]) { points += 25; correctCount++; }
-          else if (pred.p1_driver_id === finishers[1] || pred.p1_driver_id === finishers[2]) { points += 5; } // Podium Bonus
 
           // P2
           if (pred.p2_driver_id === finishers[1]) { points += 18; correctCount++; }
