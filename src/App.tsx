@@ -86,7 +86,7 @@ function RaceResults({
                     <ChevronRight className={cn("w-5 h-5 transition-transform", isExpanded && "rotate-90")} />
                   </h4>
                   <p className="text-xs text-white/40 font-mono">
-                    Processed: {new Date(race.processed_at).toLocaleDateString()}
+                    Processed: {race.processed_at ? new Date(race.processed_at.includes('T') ? race.processed_at : race.processed_at.replace(' ', 'T') + 'Z').toLocaleDateString() : 'Unknown'}
                   </p>
                 </button>
                 {onEdit && (
@@ -360,6 +360,8 @@ function AdminPanel({
         })
       });
       onSuccess();
+      fetchRaceResults();
+      fetchSchedule();
       if (editingRaceId) {
         setEditingRaceId(null);
         setRaceName('');
@@ -1392,6 +1394,7 @@ export default function App() {
   const [draftTurboDriverId, setDraftTurboDriverId] = useState<string | null>(null);
 
   const [races, setRaces] = useState<any[]>([]);
+  const [raceResults, setRaceResults] = useState<any[]>([]);
   const [viewingTeam, setViewingTeam] = useState<Standing | null>(null);
 
   useEffect(() => {
@@ -1425,7 +1428,7 @@ export default function App() {
 
   useEffect(() => {
     if (view === 'results') {
-      fetchRaces();
+      fetchRaceResults();
     }
   }, [view]);
 
@@ -1451,6 +1454,15 @@ export default function App() {
     try {
       const data = await safeFetch('/api/races');
       if (data) setRaces(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchRaceResults = async () => {
+    try {
+      const data = await safeFetch('/api/race-results');
+      if (data) setRaceResults(data);
     } catch (e) {
       console.error(e);
     }
@@ -2092,7 +2104,7 @@ export default function App() {
                 </div>
               </div>
 
-              <RaceResults races={races} />
+              <RaceResults races={raceResults} />
             </motion.div>
           )}
 
